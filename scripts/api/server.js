@@ -4,8 +4,21 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
+const MIME_TYPES = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon'
+}
+
 import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
+import { addAccountToEnv, reloadEnvAccounts } from './envAccounts.js'
 import {
     validateConfig,
     deepMerge,
@@ -15,7 +28,9 @@ import {
     syncMissingDefaults
 } from './configEditor.js'
 import { readSchedule, writeSchedule } from './scheduleStore.js'
-import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
+import { readScheduledTasks, addScheduledTask, removeScheduledTask } from './taskScheduler.js'
+import { TaskRunner } from './taskRunner.js'
+import { deleteStoredSessions, getSessionLoginStatusMap, listStoredSessions } from './sessionStore.js'
 import { resolveRunCommand } from './runCommand.js'
 import {
     log,
@@ -31,6 +46,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = getProjectRoot(__dirname)
+const publicDir = path.join(projectRoot, 'public')
 
 loadEnvFile(projectRoot)
 
@@ -110,7 +126,7 @@ const TOKEN = envStr('API_TOKEN') ?? (typeof cliArgs.token === 'string' ? cliArg
 const CORS_ORIGIN = envStr('API_CORS_ORIGIN') ?? '*'
 const LOG_BUFFER = integerSetting('API_LOG_BUFFER', envStr('API_LOG_BUFFER'), 2000)
 const STOP_TIMEOUT_MS = integerSetting('API_STOP_TIMEOUT_MS', envStr('API_STOP_TIMEOUT_MS'), 15000)
-const ALLOW_ENV_OVERRIDES = envBool('API_ALLOW_ENV_OVERRIDES', false)
+const ALLOW_ENV_OVERRIDES = envBool('API_ALLOW_ENV_OVERRIDES', true)
 const REVEAL_ENABLED = envBool('API_ALLOW_CONFIG_REVEAL', false)
 const ALLOW_CONFIG_WRITE = envBool('API_ALLOW_CONFIG_WRITE', false)
 const ALLOW_SCHEDULE_WRITE = envBool('API_ALLOW_SCHEDULE_WRITE', false)
@@ -132,6 +148,39 @@ const pm = new ProcessManager({
 })
 
 const startedAt = Date.now()
+
+/**
+ * Turns a scheduled task into the env a run needs: the account selection is
+ * expressed as exclusions (same shape the /start endpoint uses) and the headless
+ * flag rides along as a CONFIG_* override.
+ */
+function buildEnvForTask(task) {
+    reloadEnvAccounts(projectRoot)
+
+    const wanted = new Set((task.accountIndexes ?? []).map(Number))
+    if (!wanted.size) {
+        const err = new Error('Task has no accounts selected.')
+        err.code = 'BAD_REQUEST'
+        throw err
+    }
+
+    const configured = loadAccounts()
+    if (!configured.length) {
+        const err = new Error('No accounts are configured in .env.')
+        err.code = 'BAD_REQUEST'
+        throw err
+    }
+
+    const excluded = configured.map(account => account.index).filter(index => !wanted.has(index))
+    const env = excluded.length ? buildExcludedAccountsEnv(excluded).env : {}
+
+    if (task.headless != null) env.CONFIG_HEADLESS = String(Boolean(task.headless))
+    if (task.visualSearch != null) env.CONFIG_WORKER_VISUAL_SEARCH = String(Boolean(task.visualSearch))
+    if (task.edgeBrowsing != null) env.CONFIG_EXPERIMENTAL_EDGE_BROWSING = String(Boolean(task.edgeBrowsing))
+    return env
+}
+
+const taskRunner = new TaskRunner({ projectRoot, pm, buildEnvForTask })
 
 function containsControlCharacters(value) {
     return [...value].some(character => {
@@ -333,6 +382,16 @@ const requestHandler = async (req, res) => {
     try {
         // index
         if (method === 'GET' && pathname === '/') {
+            return serveStaticFile(res, pathname)
+        }
+
+        // Serve static files from public directory
+        if (method === 'GET' && (pathname.endsWith('.html') || pathname.endsWith('.css') || pathname.endsWith('.js'))) {
+            return serveStaticFile(res, pathname)
+        }
+
+        // API index
+        if (method === 'GET' && pathname === '/api') {
             return sendJson(res, 200, {
                 name: pkgName,
                 version: pkgVersion,
@@ -419,10 +478,46 @@ const requestHandler = async (req, res) => {
             return sendJson(res, 200, { runs, count: runs.length, inMemoryOnly: true })
         }
 
-        // account overview
+        // account overview — enriched with real session auth state so the badge
+        // reflects live cookies, not stale in-memory run history.
         if (method === 'GET' && pathname === '/accounts') {
+            reloadEnvAccounts(projectRoot)
             const accounts = mergeAccountStats(loadAccounts(), pm.getHistory().map(toHistoryRecord))
+            const loaded = loadConfigSafe(projectRoot)
+            const sessionPath =
+                loaded?.data && typeof loaded.data.sessionPath === 'string' ? loaded.data.sessionPath : 'sessions'
+            const sessionMap = getSessionLoginStatusMap(projectRoot, sessionPath)
+            if (sessionMap) {
+                for (const account of accounts) {
+                    const info = sessionMap.get(account.email.toLowerCase()) ?? null
+                    if (info) {
+                        account.sessionStatus = info.status
+                        account.sessionUpdatedAt = info.updatedAt
+                        account.sessionLiveAuthCookieCount = info.liveAuthCookieCount
+                        account.sessionNextAuthExpiry = info.nextAuthExpiry
+                    } else {
+                        account.sessionStatus = 'not-logged-in'
+                        account.sessionUpdatedAt = null
+                        account.sessionLiveAuthCookieCount = 0
+                        account.sessionNextAuthExpiry = null
+                    }
+                }
+            }
             return sendJson(res, 200, { accounts, count: accounts.length })
+        }
+
+        // account create; writes ACCOUNT_N_EMAIL into .env
+        if (method === 'POST' && pathname === '/accounts') {
+            const body = await readJsonObject(req)
+            try {
+                const created = addAccountToEnv(projectRoot, body.email)
+                pm.note('info', `Account ${created.email} added as ACCOUNT_${created.index} via API.`)
+                return sendJson(res, 201, { created: true, index: created.index, email: created.email })
+            } catch (err) {
+                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code === 'DUPLICATE') return sendJson(res, 409, { error: err.message, code: err.code })
+                return sendJson(res, 500, { error: err.message })
+            }
         }
 
         // session list
@@ -570,6 +665,72 @@ const requestHandler = async (req, res) => {
             }
         }
 
+        // task scheduling - list
+        if (method === 'GET' && pathname === '/schedule/tasks') {
+            try {
+                const data = readScheduledTasks(projectRoot)
+                return sendJson(res, 200, data)
+            } catch (err) {
+                return sendJson(res, 500, { error: err.message })
+            }
+        }
+
+        // task scheduling - create
+        if (method === 'POST' && pathname === '/schedule/tasks') {
+            const body = await readJsonObject(req)
+
+            if (!body.accountIndexes || !Array.isArray(body.accountIndexes)) {
+                return sendJson(res, 400, { error: 'accountIndexes array is required' })
+            }
+
+            if (!body.scheduledAt) {
+                return sendJson(res, 400, { error: 'scheduledAt timestamp is required' })
+            }
+
+            const scheduledDate = new Date(body.scheduledAt)
+            if (isNaN(scheduledDate.getTime())) {
+                return sendJson(res, 400, { error: 'Invalid scheduledAt timestamp' })
+            }
+
+            if (scheduledDate <= new Date()) {
+                return sendJson(res, 400, { error: 'scheduledAt must be in the future' })
+            }
+
+            try {
+                const task = addScheduledTask(projectRoot, {
+                    accountIndexes: body.accountIndexes,
+                    scheduledAt: scheduledDate.toISOString(),
+                    headless: Boolean(body.headless),
+                    visualSearch: Boolean(body.visualSearch),
+                    edgeBrowsing: Boolean(body.edgeBrowsing)
+                })
+
+                pm.note('info', `Task ${task.id} scheduled for ${scheduledDate.toISOString()}`)
+                return sendJson(res, 201, { created: true, task })
+            } catch (err) {
+                return sendJson(res, 500, { error: err.message })
+            }
+        }
+
+        // task scheduling - delete
+        if (method === 'DELETE' && pathname.startsWith('/schedule/tasks/')) {
+            const taskId = pathname.slice('/schedule/tasks/'.length)
+            if (!taskId) {
+                return sendJson(res, 400, { error: 'Task ID is required' })
+            }
+
+            try {
+                const result = removeScheduledTask(projectRoot, taskId)
+                pm.note('info', `Task ${taskId} cancelled via API`)
+                return sendJson(res, 200, result)
+            } catch (err) {
+                if (err.code === 'NOT_FOUND') {
+                    return sendJson(res, 404, { error: err.message })
+                }
+                return sendJson(res, 500, { error: err.message })
+            }
+        }
+
         // sse
         if (method === 'GET' && pathname === '/events') {
             return handleEventStream(req, res, url)
@@ -620,6 +781,8 @@ const requestHandler = async (req, res) => {
             const body = await readJsonObject(req)
             const force = readForce(body)
             try {
+                // Surfaces in the UI log console; the bot logs its own abort lines too.
+                pm.note('warn', 'Process Aborted by User')
                 const stopping = pm.stop({ force })
                 stopping.catch(() => {})
                 return sendJson(res, 202, { stopping: true, force })
@@ -799,6 +962,30 @@ function serveDiagnosticFile(res, pathname) {
     fs.createReadStream(full).pipe(res)
 }
 
+function serveStaticFile(res, pathname) {
+    const safePath = pathname === '/' ? '/index.html' : pathname
+    const filePath = path.join(publicDir, safePath)
+
+    if (!filePath.startsWith(publicDir)) {
+        return sendJson(res, 400, { error: 'Invalid path' })
+    }
+
+    if (!fs.existsSync(filePath)) {
+        return sendJson(res, 404, { error: 'Not found' })
+    }
+
+    const stat = fs.statSync(filePath)
+    if (!stat.isFile()) {
+        return sendJson(res, 404, { error: 'Not found' })
+    }
+
+    const ext = path.extname(filePath)
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream'
+
+    res.writeHead(200, { 'Content-Type': contentType })
+    fs.createReadStream(filePath).pipe(res)
+}
+
 // startup
 const server = http.createServer(requestHandler)
 
@@ -812,7 +999,9 @@ server.on('error', err => {
 })
 
 server.listen(PORT, HOST, () => {
-    log('INFO', `${pkgName} control API listening on http://${HOST}:${PORT} (headless - no UI)`)
+    log('INFO', `${pkgName} control API with Web UI listening on http://${HOST}:${PORT}`)
+    log('INFO', `Web UI: http://${HOST}:${PORT}`)
+    log('INFO', `API endpoints: http://${HOST}:${PORT}/api`)
     log('INFO', `Launch command: ${command} ${args.join(' ')}`.trim())
     log(
         'INFO',
@@ -841,6 +1030,12 @@ server.listen(PORT, HOST, () => {
         auth: Boolean(TOKEN)
     }
     process.stdout.write(`__API_READY__ ${JSON.stringify(ready)}\n`)
+
+    taskRunner.start()
+    log('INFO', `Scheduler: polling every ${Math.round(taskRunner.tickMs / 1000)}s for due tasks`)
+    // Fire anything already due (server was down when its time passed) without
+    // waiting a full tick.
+    taskRunner.tick().catch(err => log('ERROR', 'Initial scheduler tick failed:', err.message))
 })
 
 let shuttingDown = false
@@ -848,6 +1043,7 @@ async function shutdown(signal, { force = false } = {}) {
     if (shuttingDown) return
     shuttingDown = true
     log('INFO', `${signal} received - shutting down.`)
+    taskRunner.stop()
     server.close()
     try {
         if (pm.getStatus().state !== 'idle') {
