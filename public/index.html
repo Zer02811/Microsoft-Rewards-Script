@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Microsoft Rewards Control</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>Microsoft Rewards Control</h1>
+                <div class="server-status">
+                    <span class="status-label">Server:</span>
+                    <span class="status-indicator" id="serverStatus" data-status="offline">Offline</span>
+                </div>
+            </header>
+
+            <main>
+                <section class="add-account">
+                    <h2>Add Account</h2>
+                    <form id="addAccountForm" aria-label="Add new account">
+                        <div class="form-group">
+                            <label for="emailInput">Email Address</label>
+                            <input
+                                type="email"
+                                id="emailInput"
+                                name="email"
+                                placeholder="email@example.com"
+                                required
+                                aria-required="true"
+                            />
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Account</button>
+                    </form>
+                </section>
+
+                <section class="dashboard">
+                    <h2>Account Overview</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">Total Accounts</span>
+                            <span class="stat-value" id="totalAccounts">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Logged In</span>
+                            <span class="stat-value" id="loggedInCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Not Logged In</span>
+                            <span class="stat-value" id="notLoggedInCount">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Login Expired</span>
+                            <span class="stat-value" id="expiredCount">0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="controls-section">
+                    <h2>Execution Settings</h2>
+                    <div class="controls-grid">
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="headlessToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run in Headless Mode</span>
+                            </label>
+                            <p class="control-hint">Browser runs hidden without visible window</p>
+                        </div>
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="visualSearchToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run Visual Search</span>
+                            </label>
+                            <p class="control-hint">Automates Bing Visual Search for daily points</p>
+                        </div>
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="edgeBrowsingToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run 30-Minute Edge Browsing</span>
+                            </label>
+                            <p class="control-hint">Browses in the background for 30 minutes</p>
+                        </div>
+                        <div class="control-group">
+                            <label for="scheduleTime">Schedule for Later</label>
+                            <input type="datetime-local" id="scheduleTime" class="datetime-input" />
+                            <p class="control-hint">Leave empty to run immediately</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="queue-section">
+                    <div class="queue-header">
+                        <h2>Ready to Execute</h2>
+                        <div class="queue-actions">
+                            <button id="selectAllBtn" class="btn btn-secondary">Select All</button>
+                            <button id="runSelectedBtn" class="btn btn-success">Run Selected</button>
+                            <button id="stopBtn" class="btn btn-stop" disabled>Stop</button>
+                            <button id="scheduleSelectedBtn" class="btn btn-primary">Schedule Run</button>
+                        </div>
+                    </div>
+
+                    <div id="accountsList" class="accounts-list" role="list">
+                        <div class="empty-state">
+                            <p>No accounts configured. Add an account above to get started.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="scheduled-section">
+                    <h2>Scheduled Tasks</h2>
+                    <div id="scheduledList" class="scheduled-list">
+                        <div class="empty-state">
+                            <p>No scheduled tasks</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="logs-section">
+                    <div class="logs-header">
+                        <h2>Live Logs</h2>
+                        <div class="logs-controls">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="autoScrollToggle" class="toggle-input" checked />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Auto-scroll</span>
+                            </label>
+                            <button id="clearLogsBtn" class="btn btn-secondary">Clear</button>
+                        </div>
+                    </div>
+                    <div
+                        id="logsConsole"
+                        class="logs-console"
+                        role="log"
+                        aria-live="polite"
+                        aria-label="Live bot logs"
+                        tabindex="0"
+                    ></div>
+                </section>
+            </main>
+        </div>
+
+        <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+        <script src="app.js"></script>
+    </body>
+</html>

@@ -33,7 +33,7 @@ export function parseLogLine(rawInput, source = 'stdout') {
 
     let level = source === 'stderr' ? 'error' : 'info'
     if (/\b(ERROR|Error:|ERR!|FATAL|Traceback|Unhandled)\b/.test(raw)) level = 'error'
-    else if (/\b(WARN|WARNING|Deprecat)/i.test(raw)) level = 'warn'
+    else if (/(WARN|WARNING|Deprecat|ExperimentalWarning)/i.test(raw)) level = 'warn'
 
     return {
         ts: null,

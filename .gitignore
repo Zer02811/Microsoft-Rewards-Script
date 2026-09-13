@@ -10,3 +10,4 @@ note
 .playwright-chromium-installed
 .stfolder/
 .env
+scheduled_tasks.json

@@ -25,6 +25,15 @@ export default tseslint.config(
             'preserve-caught-error': 'off'
         }
     },
+    // Browser-side dashboard code
+    {
+        files: ['public/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.browser
+            }
+        }
+    },
     // Must come last: disables ESLint rules that conflict with Prettier formatting
     prettier
 )

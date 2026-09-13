@@ -25,6 +25,44 @@ function closeDatabase(db) {
     } catch {}
 }
 
+// Cookies Microsoft only sets once an account is actually signed in. MUID,
+// MUIDB and SRCHHPGUSR ride along on anonymous traffic too, so their presence
+// proves nothing.
+const AUTH_COOKIES = [
+    { name: 'MSPAuth', domain: 'live.com' },
+    { name: 'MSPProf', domain: 'live.com' },
+    { name: 'WLSSC', domain: 'live.com' },
+    { name: 'RPSSecAuth', domain: 'live.com' },
+    { name: '_U', domain: 'bing.com' }
+]
+
+function normalizeCookieDomain(domain) {
+    return String(domain ?? '')
+        .replace(/^\./, '')
+        .toLowerCase()
+}
+
+function isAuthCookie(cookie) {
+    const domain = normalizeCookieDomain(cookie?.domain)
+    return AUTH_COOKIES.some(
+        entry => entry.name === cookie?.name && (domain === entry.domain || domain.endsWith(`.${entry.domain}`))
+    )
+}
+
+// Playwright stores cookie expiry in seconds, using -1 for session cookies. A
+// session cookie has no recorded expiry; that is not the same as expired.
+function authCookieExpiryMs(cookie) {
+    const expires = Number(cookie?.expires)
+    if (!Number.isFinite(expires) || expires <= 0) return null
+    return expires * 1000
+}
+
+function toIso(ms) {
+    if (ms === null || !Number.isFinite(ms)) return null
+    const date = new Date(ms)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
 function cookieCount(storageState) {
     if (!storageState) return 0
     try {
@@ -35,9 +73,70 @@ function cookieCount(storageState) {
     }
 }
 
+function parseCookies(storageState) {
+    if (!storageState) return null
+    try {
+        const parsed = JSON.parse(storageState)
+        return Array.isArray(parsed?.cookies) ? parsed.cookies : null
+    } catch {
+        return null
+    }
+}
+
+function inspectAuthCookies(storageState) {
+    const cookies = parseCookies(storageState)
+    if (cookies === null) {
+        // parse failure: storage_state exists but is corrupt
+        return storageState
+            ? { liveCount: 0, expiredCount: 0, totalAuth: 0, nextExpiryMs: null, parseError: true }
+            : { liveCount: 0, expiredCount: 0, totalAuth: 0, nextExpiryMs: null, parseError: false }
+    }
+
+    const now = Date.now()
+    let liveCount = 0
+    let expiredCount = 0
+    let nextExpiryMs = null
+
+    for (const cookie of cookies) {
+        if (!isAuthCookie(cookie)) continue
+        const expiryMs = authCookieExpiryMs(cookie)
+        // null expiry means session cookie — still live, no recorded expiry
+        if (expiryMs === null) {
+            liveCount++
+            continue
+        }
+        if (expiryMs > now) {
+            liveCount++
+            if (nextExpiryMs === null || expiryMs < nextExpiryMs) nextExpiryMs = expiryMs
+        } else {
+            expiredCount++
+        }
+    }
+
+    return {
+        liveCount,
+        expiredCount,
+        totalAuth: liveCount + expiredCount,
+        nextExpiryMs,
+        parseError: false
+    }
+}
+
+function sessionAuthStatus(storageState) {
+    if (!storageState) return 'not-logged-in'
+    const info = inspectAuthCookies(storageState)
+    if (info.parseError) return 'expired'
+    if (info.liveCount > 0) return 'logged-in'
+    // Has a row but no live Microsoft auth cookies — stale/expired even if
+    // anonymous cookies like MUID still linger.
+    if (cookieCount(storageState) > 0) return 'expired'
+    return 'not-logged-in'
+}
+
 function toSession(row) {
     const updatedAt = Number(row.updated_at)
     const updatedDate = new Date(updatedAt)
+    const auth = inspectAuthCookies(row.storage_state)
     return {
         email: row.email,
         platform: row.platform,
@@ -45,7 +144,12 @@ function toSession(row) {
             Number.isFinite(updatedAt) && !Number.isNaN(updatedDate.getTime()) ? updatedDate.toISOString() : null,
         hasStorageState: Boolean(row.storage_state),
         hasFingerprint: Boolean(row.fingerprint),
-        cookieCount: cookieCount(row.storage_state)
+        cookieCount: cookieCount(row.storage_state),
+        authStatus: sessionAuthStatus(row.storage_state),
+        liveAuthCookieCount: auth.liveCount,
+        expiredAuthCookieCount: auth.expiredCount,
+        nextAuthExpiry: toIso(auth.nextExpiryMs),
+        parseError: auth.parseError
     }
 }
 
@@ -73,6 +177,40 @@ export function listStoredSessions(projectRoot, sessionPath) {
     } finally {
         closeDatabase(db)
     }
+}
+
+const LOGIN_RANK = { 'logged-in': 2, expired: 1, 'not-logged-in': 0 }
+
+export function getSessionLoginStatusMap(projectRoot, sessionPath) {
+    const listed = listStoredSessions(projectRoot, sessionPath)
+    if (!listed.databaseExists) return null
+
+    const map = new Map()
+    for (const session of listed.sessions) {
+        const key = session.email.toLowerCase()
+        const current = map.get(key)
+        if (!current || LOGIN_RANK[session.authStatus] > LOGIN_RANK[current.status]) {
+            map.set(key, {
+                status: session.authStatus,
+                updatedAt: session.updatedAt,
+                liveAuthCookieCount: session.liveAuthCookieCount,
+                nextAuthExpiry: session.nextAuthExpiry
+            })
+        } else if (LOGIN_RANK[session.authStatus] === LOGIN_RANK[current.status]) {
+            // Tie-break: keep the freshest row.
+            const a = session.updatedAt ? Date.parse(session.updatedAt) : 0
+            const b = current.updatedAt ? Date.parse(current.updatedAt) : 0
+            if (a > b) {
+                map.set(key, {
+                    status: session.authStatus,
+                    updatedAt: session.updatedAt,
+                    liveAuthCookieCount: session.liveAuthCookieCount,
+                    nextAuthExpiry: session.nextAuthExpiry
+                })
+            }
+        }
+    }
+    return map
 }
 
 export function deleteStoredSessions(projectRoot, sessionPath, email) {

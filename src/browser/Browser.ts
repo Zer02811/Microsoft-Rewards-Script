@@ -6,6 +6,7 @@ import type { MicrosoftRewardsBot } from '../index'
 import { loadSession, saveFingerprint } from '../util/SessionStore'
 import { fingerprintMatchesLocale } from '../util/Locale'
 import { formatBrowserProxyServer } from '../util/Proxy'
+import { registerBrowser, unregisterBrowser } from '../util/Abort'
 import { UserAgentManager } from './UserAgent'
 
 import type { Account } from '../interface/Account'
@@ -93,6 +94,10 @@ class Browser {
                 ...(proxyConfig && { proxy: proxyConfig }),
                 args: [...Browser.BROWSER_ARGS, ...sandboxArgs, ...certArgs]
             })
+
+            // Tracked so an abort can force-close it even mid-activity.
+            registerBrowser(browser)
+            browser.on('disconnected', () => unregisterBrowser(browser))
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error)
             this.bot.logger.error(this.bot.isMobile, 'BROWSER', `Browser launch failed: ${errorMessage}`)

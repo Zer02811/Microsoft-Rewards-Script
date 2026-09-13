@@ -16,6 +16,7 @@ import Utils, { isBrowserClosedError } from './util/Utils'
 import { loadAccounts, loadConfig } from './util/Load'
 import { closeSessionStore, loadResolvedRegion, saveResolvedRegion } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
+import { abortRun, abortSignal, isAborted, isAbortError } from './util/Abort'
 import { normalizeCountry, resolveAccountLocale } from './util/Locale'
 import type { AccountLocale } from './util/Locale'
 
@@ -410,6 +411,12 @@ export class MicrosoftRewardsBot {
         const accountStats: AccountStats[] = []
 
         for (const [accountIndex, account] of accounts.entries()) {
+            // Stop between accounts so an abort does not start a fresh login.
+            if (isAborted()) {
+                this.logger.warn('main', 'ABORT', 'Process aborted by user - skipping remaining accounts')
+                break
+            }
+
             if (accountIndex > 0) {
                 await this.waitBeforeNextAccount(account.email)
             }
@@ -439,6 +446,10 @@ export class MicrosoftRewardsBot {
                 })
 
                 const result: AccountRunResult | undefined = await this.Main(account).catch(error => {
+                    if (isAbortError(error) || isAborted()) {
+                        void this.logger.warn('main', 'ABORT', `Process aborted by user during ${accountEmail}`)
+                        return undefined
+                    }
                     void this.logger.error(
                         true,
                         'FLOW',
@@ -555,7 +566,18 @@ export class MicrosoftRewardsBot {
                 nextEmail ? ` (${nextEmail})` : ''
             }`
         )
-        await this.utils.wait(delayMs)
+        await new Promise<void>(resolve => {
+            const timer = setTimeout(() => {
+                abortSignal.removeEventListener('abort', onAbort)
+                resolve()
+            }, delayMs)
+            // Otherwise a Stop during a multi-minute delay would look frozen.
+            const onAbort = (): void => {
+                clearTimeout(timer)
+                resolve()
+            }
+            abortSignal.addEventListener('abort', onAbort, { once: true })
+        })
     }
 
     async createDesktopSession(account: Account): Promise<BrowserSession> {
@@ -596,6 +618,9 @@ export class MicrosoftRewardsBot {
         let mobileSession: BrowserSession | null = null
         let desktopSession: BrowserSession | null = null
         const edgeBrowsingController = new AbortController()
+        // A user abort must also cancel the 30-minute background task.
+        const onRunAbort = (): void => edgeBrowsingController.abort()
+        abortSignal.addEventListener('abort', onRunAbort, { once: true })
         let edgeBrowsingTask: Promise<void> | null = null
         let edgeBrowsingFinished = false
 
@@ -933,6 +958,8 @@ export class MicrosoftRewardsBot {
                 }
             })
         } finally {
+            abortSignal.removeEventListener('abort', onRunAbort)
+
             if (edgeBrowsingTask) {
                 edgeBrowsingController.abort()
                 await edgeBrowsingTask
@@ -975,16 +1002,35 @@ async function main(): Promise<void> {
     process.on('beforeExit', () => {
         void flushAllWebhooks()
     })
-    process.on('SIGINT', async () => {
-        rewardsBot.logger.warn('main', 'PROCESS', 'SIGINT received, flushing and exiting...')
+    // Stop requests arrive as signals from the control API. Abort first so every
+    // tracked Chromium is closed, then flush and exit - otherwise the browsers
+    // only die because the OS reaps the process tree.
+    let aborting = false
+    const onStopSignal = async (signal: 'SIGINT' | 'SIGTERM', exitCode: number): Promise<void> => {
+        if (aborting) return
+        aborting = true
+
+        rewardsBot.logger.warn('main', 'ABORT', `Process aborted by user (${signal}) - closing browsers...`)
+        const closed = await abortRun()
+        rewardsBot.logger.warn('main', 'ABORT', `Process aborted by user | browsersClosed=${closed}`)
+
         await flushAllWebhooks()
-        process.exit(130)
-    })
-    process.on('SIGTERM', async () => {
-        rewardsBot.logger.warn('main', 'PROCESS', 'SIGTERM received, flushing and exiting...')
-        await flushAllWebhooks()
-        process.exit(143)
-    })
+        process.exit(exitCode)
+    }
+    process.on('SIGINT', () => void onStopSignal('SIGINT', 130))
+    process.on('SIGTERM', () => void onStopSignal('SIGTERM', 143))
+
+    // The control API writes this on stdin because Windows cannot deliver a real
+    // SIGTERM to a child; without it a stop would hard-kill and orphan Chromium.
+    if (!process.stdin.isTTY) {
+        process.stdin.setEncoding('utf8')
+        process.stdin.on('data', chunk => {
+            if (chunk.includes('__ABORT__')) void onStopSignal('SIGTERM', 143)
+        })
+        process.stdin.on('error', () => undefined)
+        // Do not hold the event loop open just for this listener.
+        process.stdin.unref()
+    }
     process.on('uncaughtException', async error => {
         if (isBrowserClosedError(error)) {
             rewardsBot.logger.debug(

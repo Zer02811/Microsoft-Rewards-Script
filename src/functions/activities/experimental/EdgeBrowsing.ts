@@ -6,6 +6,7 @@ import type { AppDashboardData, Promotion } from '../../../interface/AppDashBoar
 import type { DashboardData } from '../../../interface/DashboardData'
 import { BaseActivity } from '../BaseActivity'
 import { EdgeBrowsingProgress, type EdgeBrowsingProgressSnapshot } from './EdgeBrowsingProgress'
+import { EdgeLiveBrowsing } from './EdgeLiveBrowsing'
 
 const LOG_TAG = 'EDGE-BROWSING'
 const PROMOTION_NAME = 'edge_browsing_streak_flight'
@@ -124,6 +125,15 @@ export class EdgeBrowsing extends BaseActivity {
                     ` | estimatedDurationMinutes=${progress.estimatedDurationMinutes}`
             )
 
+            // Real browsing session (scrolling, reading, clicking) alongside the report loop.
+            const liveBrowsing = new EdgeLiveBrowsing(this.bot).run(signal).catch(error => {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    LOG_TAG,
+                    `Live browsing session failed | message=${error instanceof Error ? error.message : String(error)}`
+                )
+            })
+
             for (let reportNumber = 1; reportNumber <= reportCount; reportNumber++) {
                 const beforeReport = progress.snapshot(reportNumber - 1)
 
@@ -201,6 +211,8 @@ export class EdgeBrowsing extends BaseActivity {
             if (!serverComplete && !signal?.aborted) {
                 serverComplete = await this.refreshServerCompletion(accessToken, reportsProcessed, reportCount)
             }
+
+            await liveBrowsing
 
             const finished = progress.snapshot(reportsProcessed)
             const summary =
