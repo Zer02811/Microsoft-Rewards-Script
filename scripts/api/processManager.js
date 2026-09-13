@@ -5,6 +5,12 @@ import { parseLogLine, createRunState, applyLogToRunState, summarizeRunState, se
 
 const IS_WIN = process.platform === 'win32'
 
+// Written to the child's stdin to request a graceful abort. Windows has no real
+// SIGTERM for child processes, so a signal would just be TerminateProcess and the
+// bot could never close its browsers; this gives it a cross-platform way to hear
+// "stop" and unwind before we escalate to killing the tree.
+export const ABORT_SENTINEL = '__ABORT__'
+
 const BLOCKED_ENV = new Set([
     'NODE_OPTIONS',
     'NODE_PATH',
@@ -82,7 +88,7 @@ export class ProcessManager extends EventEmitter {
             child = spawn(this.command, args, {
                 cwd: this.cwd,
                 env,
-                stdio: ['ignore', 'pipe', 'pipe'],
+                stdio: ['pipe', 'pipe', 'pipe'],
                 detached: !IS_WIN, // own process group on POSIX so we can signal the whole tree
                 windowsHide: true
             })
@@ -128,9 +134,17 @@ export class ProcessManager extends EventEmitter {
         const wasStopping = this.state === 'stopping'
         this.state = 'stopping'
         if (!wasStopping) {
-            this._controllerLog('warn', force ? 'Force-stopping run (SIGKILL)…' : 'Stopping run (SIGTERM)…')
             this._emitStatus('stopping')
-            this._killTree(force ? 'SIGKILL' : 'SIGTERM')
+
+            if (force) {
+                this._controllerLog('warn', 'Force-stopping run - killing the browser process tree…')
+                this._killTree('SIGKILL')
+            } else {
+                // Ask the bot to abort and close its browsers itself; _killTimer
+                // escalates to a tree kill if it does not exit in time.
+                this._controllerLog('warn', 'Stopping run - asking the bot to abort and close browsers…')
+                this._requestAbort()
+            }
 
             this._killTimer = setTimeout(() => {
                 if (this.state !== 'idle') {
@@ -337,6 +351,19 @@ export class ProcessManager extends EventEmitter {
 
     _emitStatus(reason) {
         this.emit('status', { reason, ...this.getStatus() })
+    }
+
+    /**
+     * Ask the bot to abort gracefully: sentinel on stdin (works on Windows) plus
+     * SIGTERM on POSIX, where the bot's own handler is the faster path.
+     */
+    _requestAbort() {
+        try {
+            this.child?.stdin?.write(`${ABORT_SENTINEL}\n`)
+        } catch {
+            // stdin already closed - the signal / kill timer still covers us
+        }
+        if (!IS_WIN) this._killTree('SIGTERM')
     }
 
     _killTree(signal) {
