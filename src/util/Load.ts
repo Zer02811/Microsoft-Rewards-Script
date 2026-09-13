@@ -3,6 +3,7 @@ import path from 'path'
 
 import type { Account, AccountProxy, ConfigSaveFingerprint } from '../interface/Account'
 import type { Config } from '../interface/Config'
+import { describeOverrideValue, mergeEnvOverrides } from './ConfigEnvOverrides'
 import { validateAccounts, validateConfig } from './Validator'
 
 let configCache: Config
@@ -154,6 +155,24 @@ export function loadAccounts(): Account[] {
     }
 }
 
+function applyConfigEnvOverrides(rawConfig: unknown): void {
+    if (typeof rawConfig !== 'object' || rawConfig === null || Array.isArray(rawConfig)) return
+
+    const { applied, forced, errors } = mergeEnvOverrides(rawConfig as Record<string, unknown>)
+
+    // Loud on both sides: a silently ignored toggle is exactly the bug this fixes,
+    // and a rejected value would otherwise look identical to the feature being off.
+    for (const { env, path: dotted, value } of applied) {
+        console.log(`[Config] override: ${env} -> .${dotted} = ${describeOverrideValue(env, value)}`)
+    }
+    for (const { path: dotted, value } of forced) {
+        console.log(`[Config] override: .${dotted} = ${JSON.stringify(value)} (forced)`)
+    }
+    for (const { message } of errors) {
+        console.warn(`[Config] WARN: ignored invalid override - ${message}`)
+    }
+}
+
 export function loadConfig(): Config {
     try {
         if (configCache) {
@@ -170,6 +189,14 @@ export function loadConfig(): Config {
         const config = fs.readFileSync(configPath, 'utf-8')
 
         const unverifiedConfig = JSON.parse(config)
+
+        // CONFIG_* overrides are merged here rather than written to config.json,
+        // so every launcher (Web UI, scheduler, plain shell, Docker) gets them by
+        // setting an env var. Runs before validateConfig so overridden values go
+        // through the same schema checks as file values.
+        ensureEnvLoaded()
+        applyConfigEnvOverrides(unverifiedConfig)
+
         const configData = validateConfig(unverifiedConfig)
 
         configCache = configData

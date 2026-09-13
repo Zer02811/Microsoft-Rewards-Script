@@ -6,10 +6,12 @@ export interface EnvOverrideEntry {
     env: string
     path: string // dotted path into config.json
     type: OverrideType
+    secret?: boolean // never print the value; applied overrides are logged
 }
 
 export const ENV_OVERRIDES: EnvOverrideEntry[] = [
     // General
+    { env: 'CONFIG_HEADLESS', path: 'headless', type: 'bool' },
     { env: 'CONFIG_CLUSTERS', path: 'clusters', type: 'number' },
     { env: 'CONFIG_DEBUG_LOGS', path: 'debugLogs', type: 'bool' },
     { env: 'CONFIG_ERROR_DIAGNOSTICS', path: 'errorDiagnostics', type: 'bool' },
@@ -72,18 +74,18 @@ export const ENV_OVERRIDES: EnvOverrideEntry[] = [
 
     // Discord webhook
     { env: 'CONFIG_DISCORD_ENABLED', path: 'webhook.discord.enabled', type: 'bool' },
-    { env: 'CONFIG_DISCORD_URL', path: 'webhook.discord.url', type: 'string' },
+    { env: 'CONFIG_DISCORD_URL', path: 'webhook.discord.url', type: 'string', secret: true },
 
     // Telegram webhook
     { env: 'CONFIG_TELEGRAM_ENABLED', path: 'webhook.telegram.enabled', type: 'bool' },
-    { env: 'CONFIG_TELEGRAM_BOTTOKEN', path: 'webhook.telegram.botToken', type: 'string' },
-    { env: 'CONFIG_TELEGRAM_CHATID', path: 'webhook.telegram.chatId', type: 'string' },
+    { env: 'CONFIG_TELEGRAM_BOTTOKEN', path: 'webhook.telegram.botToken', type: 'string', secret: true },
+    { env: 'CONFIG_TELEGRAM_CHATID', path: 'webhook.telegram.chatId', type: 'string', secret: true },
 
     // ntfy webhook (tags are comma-separated e.g. "bot,notify")
     { env: 'CONFIG_NTFY_ENABLED', path: 'webhook.ntfy.enabled', type: 'bool' },
-    { env: 'CONFIG_NTFY_URL', path: 'webhook.ntfy.url', type: 'string' },
-    { env: 'CONFIG_NTFY_TOPIC', path: 'webhook.ntfy.topic', type: 'string' },
-    { env: 'CONFIG_NTFY_TOKEN', path: 'webhook.ntfy.token', type: 'string' },
+    { env: 'CONFIG_NTFY_URL', path: 'webhook.ntfy.url', type: 'string', secret: true },
+    { env: 'CONFIG_NTFY_TOPIC', path: 'webhook.ntfy.topic', type: 'string', secret: true },
+    { env: 'CONFIG_NTFY_TOKEN', path: 'webhook.ntfy.token', type: 'string', secret: true },
     { env: 'CONFIG_NTFY_TITLE', path: 'webhook.ntfy.title', type: 'string' },
     { env: 'CONFIG_NTFY_PRIORITY', path: 'webhook.ntfy.priority', type: 'number' },
     { env: 'CONFIG_NTFY_TAGS', path: 'webhook.ntfy.tags', type: 'array' },
@@ -95,7 +97,13 @@ export const ENV_OVERRIDES: EnvOverrideEntry[] = [
     { env: 'CONFIG_WEBHOOK_LOG_FILTER_KEYWORDS', path: 'webhook.webhookLogFilter.keywords', type: 'array' }
 ]
 
-const FORCED_OVERRIDES: { path: string; value: unknown }[] = [{ path: 'headless', value: true }]
+// Docker images set FORCE_HEADLESS=1 because containers have no display, so
+// headless is pinned there and CONFIG_HEADLESS cannot turn it off.
+function forcedOverrides(env: NodeJS.ProcessEnv): { path: string; value: unknown }[] {
+    const raw = env.FORCE_HEADLESS?.trim().toLowerCase()
+    const forced = raw !== undefined && ['1', 'true', 'yes', 'on'].includes(raw)
+    return forced ? [{ path: 'headless', value: true }] : []
+}
 
 function setDeep(obj: Record<string, unknown>, dottedPath: string, value: unknown): void {
     const parts = dottedPath.split('.')
@@ -111,15 +119,21 @@ function setDeep(obj: Record<string, unknown>, dottedPath: string, value: unknow
     cur[parts[parts.length - 1] as string] = value
 }
 
+// Shells, compose files and CI runners all spell booleans differently, so accept
+// the same set Load.ts accepts for its own env flags instead of only true/false.
+const TRUE_WORDS = new Set(['1', 'true', 'yes', 'on'])
+const FALSE_WORDS = new Set(['0', 'false', 'no', 'off'])
+
 function coerceScalar(raw: string, type: 'bool' | 'number' | 'string', env: string): unknown {
     switch (type) {
-        case 'bool':
-            if (raw !== 'true' && raw !== 'false') {
-                throw new Error(`${env} expects true or false, got '${raw}'.`)
-            }
-            return raw === 'true'
+        case 'bool': {
+            const word = raw.trim().toLowerCase()
+            if (TRUE_WORDS.has(word)) return true
+            if (FALSE_WORDS.has(word)) return false
+            throw new Error(`${env} expects a boolean (true/false, 1/0, yes/no, on/off), got '${raw}'.`)
+        }
         case 'number': {
-            const n = Number(raw)
+            const n = Number(raw.trim())
             if (!Number.isFinite(n)) throw new Error(`${env} expects a JSON number, got '${raw}'.`)
             return n
         }
@@ -127,6 +141,13 @@ function coerceScalar(raw: string, type: 'bool' | 'number' | 'string', env: stri
         default:
             return raw
     }
+}
+
+const SECRET_ENVS = new Set(ENV_OVERRIDES.filter(entry => entry.secret).map(entry => entry.env))
+
+// Applied overrides get logged, and some of them are webhook URLs and bot tokens.
+export function describeOverrideValue(envName: string, value: unknown): string {
+    return SECRET_ENVS.has(envName) ? '***' : JSON.stringify(value)
 }
 
 export interface ComputedOverride {
@@ -169,6 +190,26 @@ export function computeOverrides(env: NodeJS.ProcessEnv = process.env): {
     return { applied, errors }
 }
 
+export interface MergeReport {
+    forced: { path: string; value: unknown }[]
+    applied: ComputedOverride[]
+    errors: OverrideError[]
+}
+
+// Merges CONFIG_* overrides into an already-parsed config object. loadConfig()
+// calls this on every start so a launcher (Web UI, scheduler, plain shell) only
+// has to set the env var - nothing has to rewrite config.json first.
+// Unlike applyEnvOverrides this is not all-or-nothing: valid overrides still
+// land and the caller decides how loudly to report the rejected ones.
+export function mergeEnvOverrides(config: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): MergeReport {
+    const { applied, errors } = computeOverrides(env)
+    const forced = forcedOverrides(env)
+    // applied first, forced last: FORCE_HEADLESS pins headless on and CONFIG_HEADLESS cannot undo it
+    for (const { path: p, value } of applied) setDeep(config, p, value)
+    for (const { path: p, value } of forced) setDeep(config, p, value)
+    return { forced, applied, errors }
+}
+
 export interface ApplyReport {
     configPath: string
     forced: { path: string; value: unknown }[]
@@ -177,18 +218,19 @@ export interface ApplyReport {
 }
 
 export function applyEnvOverrides(configPath: string, env: NodeJS.ProcessEnv = process.env): ApplyReport {
-    const { applied, errors } = computeOverrides(env)
-    if (errors.length > 0) {
-        return { configPath, forced: [], applied: [], errors }
+    // Preflight before touching the file: a single bad value must not leave a
+    // half-overridden config.json behind.
+    const { errors: rejected } = computeOverrides(env)
+    if (rejected.length > 0) {
+        return { configPath, forced: [], applied: [], errors: rejected }
     }
 
     const config = readJson(configPath) as Record<string, unknown>
-    for (const { path: p, value } of FORCED_OVERRIDES) setDeep(config, p, value)
-    for (const { path: p, value } of applied) setDeep(config, p, value)
+    const { applied, forced } = mergeEnvOverrides(config, env)
 
     writeConfigAtomic(configPath, config, { backup: false })
 
-    return { configPath, forced: FORCED_OVERRIDES, applied, errors: [] }
+    return { configPath, forced, applied, errors: [] }
 }
 
 // ── CLI entry point, used by entrypoint.sh ──
@@ -269,7 +311,9 @@ Examples:
                 process.exit(1)
             }
             report.forced.forEach(f => console.log(`[entrypoint]   .${f.path} = ${f.value} (forced)`))
-            report.applied.forEach(a => console.log(`[entrypoint]   .${a.path} = ${JSON.stringify(a.value)}`))
+            report.applied.forEach(a =>
+                console.log(`[entrypoint]   .${a.path} = ${describeOverrideValue(a.env, a.value)}`)
+            )
             console.log(`[entrypoint] Applied ${report.applied.length} override(s).`)
             process.exit(0)
         } catch (err) {
