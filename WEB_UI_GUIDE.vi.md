@@ -336,11 +336,28 @@ Một thông báo nhỏ sẽ trượt ra xác nhận đã bắt đầu, nhãn Se
 
 **Nút Remove** chỉ gỡ tài khoản khỏi danh sách này, nhưng **không xóa nó khỏi file `.env`**, nên tài khoản sẽ xuất hiện lại ở lần làm mới trang kế tiếp. Muốn xóa hẳn một tài khoản, hãy mở `.env` bằng Notepad và xóa dòng `ACCOUNT_N_EMAIL` của nó.
 
-### 5.6 - Scheduled Tasks (Các tác vụ đã lên lịch)
+### 5.6 - Proxy cho từng tài khoản
+
+Mỗi dòng tài khoản có một nút **Proxy**. Bấm vào đó để mở khung sửa proxy ngay bên dưới danh sách.
+
+Khung này cho bạn nhập **Proxy address**, **Port**, **Username**, **Password**, và một công tắc **Use for API requests too**. Sau khi lưu, dòng tài khoản sẽ hiện một **huy hiệu xanh** `host:port` để bạn biết tài khoản đó đã có proxy.
+
+**Bạn chỉ cần quan tâm mục này nếu chạy nhiều tài khoản.** Nếu chỉ có 1 tài khoản thì bỏ qua.
+
+> 📖 **Proxy là gì, chọn loại nào, mua ở đâu, sửa lỗi ra sao** — xem tài liệu riêng: **`PROXY_GUIDE.vi.md`**. Tài liệu đó viết riêng cho người chưa từng dùng proxy bao giờ.
+
+**Bốn điều cần nhớ ngay:**
+
+- **Một tài khoản phải dùng một proxy riêng.** Nhiều tài khoản dùng chung một proxy thì proxy mất hết tác dụng.
+- **Tài khoản/mật khẩu proxy để ở ô riêng**, không nhập vào ô Proxy address.
+- **SOCKS proxy không dùng được mật khẩu** — chỉ dùng HTTP hoặc HTTPS nếu proxy có đăng nhập.
+- **Thay đổi chỉ áp dụng cho lần chạy tới.** Tool đang chạy thì không sửa được, phải bấm **Stop** trước.
+
+### 5.7 - Scheduled Tasks (Các tác vụ đã lên lịch)
 
 Liệt kê các phiên chạy bạn đã xếp hàng cho một thời điểm trong tương lai. Mỗi mục hiển thị giờ chạy, những tài khoản nào, và một nút **Cancel**.
 
-### 5.7 - Cách lên lịch một phiên chạy
+### 5.8 - Cách lên lịch một phiên chạy
 
 1. Tích chọn các tài khoản bạn muốn.
 2. Đặt ngày và giờ trong **Schedule for Later**. Thời điểm đó phải ở tương lai, và tính theo đồng hồ của chính máy bạn.
@@ -351,7 +368,7 @@ Liệt kê các phiên chạy bạn đã xếp hàng cho một thời điểm tr
 - Tính năng lên lịch phải được bật. Nó **mặc định là tắt** như một biện pháp an toàn. Xem [mục 6](#6-tùy-chọn-bật-tính-năng-lên-lịch). Nếu đang tắt, bạn sẽ nhận thông báo lỗi có nhắc tới `API_ALLOW_SCHEDULE_WRITE`.
 - **Terminal của server vẫn phải đang chạy khi đến giờ**, và máy tính phải đang ở trạng thái thức. Người phục vụ đã về nhà thì không ai bắt đầu phiên chạy được.
 
-### 5.8 - Live Logs (Log trực tiếp)
+### 5.9 - Live Logs (Log trực tiếp)
 
 Bảng console màu đen ở cuối trang. Đây là nơi bot tường thuật những gì nó đang làm, theo thời gian thực.
 
@@ -469,6 +486,8 @@ Nếu bạn thay đổi để server lắng nghe trên cả mạng (bằng thứ
 
 **Đừng đưa `.env` hoặc `config.json` lên một kho GitHub công khai.** Dự án đã cấu hình để Git bỏ qua cả hai file này, nên chuyện đó chỉ xảy ra nếu bạn cố tình làm. Đừng làm.
 
+**Mật khẩu proxy cũng nằm trong `.env`.** Khi bạn lưu proxy qua Web UI, thông tin proxy được ghi vào `.env` dưới dạng các dòng `ACCOUNT_N_PROXY_*`. Web UI **không bao giờ hiển thị lại** mật khẩu proxy đã lưu — đó là lý do ô Password luôn trống mỗi khi bạn mở lại khung sửa. Cùng quy tắc như trên: đừng chia sẻ file này.
+
 **Về rủi ro với tài khoản của bạn.** Tự động hóa Microsoft Rewards là trái với điều khoản dịch vụ của Microsoft. Tài khoản thực sự có thể bị tạm khóa hoặc bị cấm vì việc này. Công cụ cố gắng hành xử giống người thật, với các khoảng nghỉ hợp lý, nhưng không có gì bảo đảm. Hãy dùng nó với một tài khoản mà bạn chấp nhận được nếu mất, và hiểu rằng bạn đang tự nhận lấy rủi ro đó.
 
 ---
@@ -502,3 +521,10 @@ Rồi mở `http://127.0.0.1:3010`.
 | `config.json` | Cách bot hoạt động                             |
 
 **Phím tắt:** nhấn **Ctrl+C** trong terminal của server để dừng server.
+
+**Tài liệu khác:**
+
+| File                 | Nội dung                                                                 |
+| -------------------- | ------------------------------------------------------------------------ |
+| `WEB_UI_GUIDE.vi.md` | Hướng dẫn Web UI dành cho người mới (file này)                           |
+| `PROXY_GUIDE.vi.md`  | Hướng dẫn cài đặt proxy từ A đến Z — loại nào, mua ở đâu, sửa lỗi ra sao |

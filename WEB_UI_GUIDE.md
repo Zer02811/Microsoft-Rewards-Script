@@ -407,12 +407,38 @@ left behind either way.
 from your `.env` file**, so it will reappear on the next refresh. To remove an
 account for good, open `.env` in Notepad and delete its `ACCOUNT_N_EMAIL` line.
 
-### 5.6 - Scheduled Tasks
+### 5.6 - Per-account proxy
+
+Every account row has a **Proxy** button. Click it to open the proxy editor just
+below the account list.
+
+The editor takes a **Proxy address**, **Port**, **Username**, **Password**, and a
+**Use for API requests too** toggle. After saving, the account row shows a small
+blue `host:port` badge so you can see at a glance which accounts have a proxy.
+
+**You only need this section if you run more than one account.** With a single
+account, skip it — adding a proxy just makes the tool slower.
+
+> 📖 **What a proxy is, which kind to buy, where to get one, and how to fix the
+> common errors** — see the dedicated guide: **`PROXY_GUIDE.vi.md`** (Vietnamese).
+> It is written for someone who has never used a proxy before.
+
+**Four things worth knowing right away:**
+
+- **One account, one proxy.** Several accounts sharing a single proxy defeats the
+  purpose entirely — Microsoft still sees them all on the same IP.
+- **Put proxy credentials in their own fields**, never inside the Proxy address box.
+- **SOCKS proxies cannot use a password.** Use HTTP or HTTPS if your proxy needs
+  a login.
+- **Changes apply to the next run.** You cannot edit a proxy while a run is
+  active — press **Stop** first.
+
+### 5.7 - Scheduled Tasks
 
 Lists runs you've queued for a future time. Each entry shows the time, which
 accounts, and a **Cancel** button.
 
-### 5.7 - How to schedule a run
+### 5.8 - How to schedule a run
 
 1. Tick the accounts you want.
 2. Set the date and time in **Schedule for Later**. It must be in the future,
@@ -427,7 +453,7 @@ accounts, and a **Cancel** button.
 - **Your server terminal must still be running when the time arrives**, and your
   computer must be awake. Nothing can start a run if the waiter has gone home.
 
-### 5.8 - Live Logs
+### 5.9 - Live Logs
 
 The black console at the bottom. This is the bot narrating what it's doing, live.
 
