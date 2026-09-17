@@ -8,6 +8,7 @@ let accounts = []
 let selectedAccountIndexes = new Set()
 let scheduledTasks = []
 let logSource = null
+let proxyAccountIndex = null
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput')
@@ -31,6 +32,17 @@ const logsConsole = document.getElementById('logsConsole')
 const autoScrollToggle = document.getElementById('autoScrollToggle')
 const clearLogsBtn = document.getElementById('clearLogsBtn')
 const toast = document.getElementById('toast')
+const proxyForm = document.getElementById('proxyForm')
+const proxyEmpty = document.getElementById('proxyEmpty')
+const proxyAccountEmail = document.getElementById('proxyAccountEmail')
+const proxyUrlInput = document.getElementById('proxyUrlInput')
+const proxyPortInput = document.getElementById('proxyPortInput')
+const proxyUsernameInput = document.getElementById('proxyUsernameInput')
+const proxyPasswordInput = document.getElementById('proxyPasswordInput')
+const proxyPasswordHint = document.getElementById('proxyPasswordHint')
+const proxyHttpToggle = document.getElementById('proxyHttpToggle')
+const proxyCancelBtn = document.getElementById('proxyCancelBtn')
+const proxyClearBtn = document.getElementById('proxyClearBtn')
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,6 +78,103 @@ function setupEventListeners() {
     )
     stopBtn.addEventListener('click', handleStop)
     clearLogsBtn.addEventListener('click', handleClearLogs)
+    proxyForm.addEventListener('submit', handleSaveProxy)
+    proxyCancelBtn.addEventListener('click', closeProxyEditor)
+    proxyClearBtn.addEventListener('click', handleClearProxy)
+}
+
+// Proxy editor — edits ACCOUNT_N_PROXY_* in .env through the control API.
+function openProxyEditor(index) {
+    const account = accounts.find(acc => acc.index === index)
+    if (!account) return
+
+    proxyAccountIndex = index
+    proxyAccountEmail.textContent = account.email
+    proxyEmpty.hidden = true
+    proxyForm.hidden = false
+
+    // Reset first so a failed load cannot leave the previous account's values on screen.
+    proxyUrlInput.value = ''
+    proxyPortInput.value = ''
+    proxyUsernameInput.value = ''
+    proxyPasswordInput.value = ''
+    proxyHttpToggle.checked = false
+
+    fetch(`${API_BASE_URL}/accounts/${index}/proxy`)
+        .then(response => (response.ok ? response.json() : Promise.reject(new Error('load failed'))))
+        .then(data => {
+            // Ignore a response that arrived after the user switched accounts.
+            if (proxyAccountIndex !== index) return
+            const proxy = data.proxy || {}
+            proxyUrlInput.value = proxy.url || ''
+            proxyPortInput.value = proxy.port ? String(proxy.port) : ''
+            proxyUsernameInput.value = proxy.username || ''
+            proxyHttpToggle.checked = Boolean(proxy.proxyHttp)
+            proxyPasswordHint.textContent = proxy.hasPassword
+                ? 'A password is saved. Leave blank to keep it.'
+                : 'No password saved yet.'
+        })
+        .catch(() => showToast('Could not load the saved proxy', 'error'))
+
+    proxyForm.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function closeProxyEditor() {
+    proxyAccountIndex = null
+    proxyForm.hidden = true
+    proxyEmpty.hidden = false
+    proxyAccountEmail.textContent = 'an account'
+}
+
+function proxyPayloadFromForm() {
+    const body = {
+        url: proxyUrlInput.value.trim(),
+        username: proxyUsernameInput.value.trim(),
+        proxyHttp: proxyHttpToggle.checked
+    }
+    // Omit blanks: the port field is only meaningful with a URL, and an empty
+    // password means "keep the stored one".
+    const port = proxyPortInput.value.trim()
+    if (port) body.port = Number(port)
+    if (proxyPasswordInput.value) body.password = proxyPasswordInput.value
+    return body
+}
+
+async function saveProxy(body, successMessage) {
+    const index = proxyAccountIndex
+    if (index == null) return false
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/accounts/${index}/proxy`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+            showToast(data.error || 'Failed to save the proxy', 'error')
+            return false
+        }
+
+        showToast(successMessage, 'success')
+        closeProxyEditor()
+        await checkServerHealth()
+        return true
+    } catch {
+        showToast('Failed to connect to server', 'error')
+        return false
+    }
+}
+
+async function handleSaveProxy(e) {
+    e.preventDefault()
+    await saveProxy(proxyPayloadFromForm(), 'Proxy saved - it applies to the next run')
+}
+
+async function handleClearProxy() {
+    if (!confirm('Remove the proxy for this account?')) return
+    await saveProxy({ url: '', proxyHttp: false }, 'Proxy removed')
 }
 
 // Live log stream (Server-Sent Events)
@@ -558,10 +667,12 @@ function renderAccounts() {
                     <div class="account-meta">
                         <span>Runs: ${account.runs}</span>
                         ${account.lastRunAt ? `<span>Last: ${formatDate(account.lastRunAt)}</span>` : ''}
+                        ${account.proxy ? `<span class="account-proxy-badge">${escapeHtml(formatProxyLabel(account.proxy))}</span>` : ''}
                     </div>
                 </div>
                 <div class="account-points">${account.points} pts</div>
                 <span class="account-status ${account.status}">${formatStatus(account.status)}</span>
+                <button class="btn btn-secondary" data-index="${account.index}" data-action="proxy">Proxy</button>
                 <button class="btn btn-danger" data-index="${account.index}" data-action="delete">Remove</button>
             </div>
         `
@@ -580,6 +691,17 @@ function renderAccounts() {
             handleDeleteAccount(parseInt(e.target.dataset.index))
         })
     })
+
+    accountsList.querySelectorAll('[data-action="proxy"]').forEach(btn => {
+        btn.addEventListener('click', e => {
+            openProxyEditor(parseInt(e.target.dataset.index))
+        })
+    })
+}
+
+function formatProxyLabel(proxy) {
+    const label = `${proxy.url}${proxy.port ? `:${proxy.port}` : ''}`
+    return proxy.hasCredentials ? `${label} (auth)` : label
 }
 
 function updateStats() {

@@ -110,6 +110,72 @@
                     </div>
                 </section>
 
+                <section class="proxy-section">
+                    <h2>Proxy for <span id="proxyAccountEmail">an account</span></h2>
+
+                    <div id="proxyEmpty" class="empty-state">
+                        <p>Select an account above, then click <strong>Proxy</strong> on its row to edit it here.</p>
+                    </div>
+
+                    <form id="proxyForm" hidden aria-label="Edit account proxy">
+                        <div class="proxy-grid">
+                            <div class="form-group proxy-wide">
+                                <label for="proxyUrlInput">Proxy address</label>
+                                <input
+                                    type="text"
+                                    id="proxyUrlInput"
+                                    placeholder="proxy.example.com or socks5://proxy.example.com"
+                                    autocomplete="off"
+                                />
+                                <p class="control-hint">
+                                    Include the scheme (<code>http://</code>, <code>https://</code>,
+                                    <code>socks4://</code>, <code>socks5://</code>). Leave this blank and save to
+                                    disable the proxy for this account.
+                                </p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="proxyPortInput">Port</label>
+                                <input type="text" id="proxyPortInput" placeholder="8080" autocomplete="off" />
+                                <p class="control-hint">A number from 1 to 65535.</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="proxyUsernameInput">Username (optional)</label>
+                                <input type="text" id="proxyUsernameInput" autocomplete="off" />
+                                <p class="control-hint">Not supported for SOCKS proxies.</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="proxyPasswordInput">Password (optional)</label>
+                                <input type="password" id="proxyPasswordInput" autocomplete="new-password" />
+                                <p class="control-hint" id="proxyPasswordHint">
+                                    Leave blank to keep the saved password.
+                                </p>
+                            </div>
+
+                            <div class="control-group proxy-wide">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="proxyHttpToggle" class="toggle-input" />
+                                    <span class="toggle-switch"></span>
+                                    <span class="toggle-text">Use for API requests too</span>
+                                </label>
+                                <p class="control-hint">
+                                    On: the proxy covers both the browser <em>and</em> the direct Rewards API calls.
+                                    Off: the browser uses the proxy, but API calls go out from your own connection.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="proxy-actions">
+                            <button type="submit" class="btn btn-primary">Save Proxy</button>
+                            <button type="button" id="proxyCancelBtn" class="btn btn-secondary">Close</button>
+                            <button type="button" id="proxyClearBtn" class="btn btn-danger">Remove Proxy</button>
+                        </div>
+                        <p class="control-hint">Changes are saved to <code>.env</code> and apply to the next run.</p>
+                    </form>
+                </section>
+
                 <section class="scheduled-section">
                     <h2>Scheduled Tasks</h2>
                     <div id="scheduledList" class="scheduled-list">
