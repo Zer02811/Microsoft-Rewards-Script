@@ -327,6 +327,47 @@ input::placeholder {
     color: var(--accent);
 }
 
+.account-proxy-badge {
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.proxy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.proxy-wide {
+    grid-column: 1 / -1;
+}
+
+.proxy-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.proxy-section code {
+    background: var(--bg-primary);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+input[type='password'] {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
 .toast {
     position: fixed;
     bottom: 2rem;

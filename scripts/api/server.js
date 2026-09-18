@@ -19,6 +19,7 @@ const MIME_TYPES = {
 import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
 import { addAccountToEnv, reloadEnvAccounts } from './envAccounts.js'
+import { readAccountProxy, validateProxyInput, writeAccountProxy } from './accountProxy.js'
 import {
     validateConfig,
     deepMerge,
@@ -504,6 +505,55 @@ const requestHandler = async (req, res) => {
                 }
             }
             return sendJson(res, 200, { accounts, count: accounts.length })
+        }
+
+        // per-account proxy - read
+        if (method === 'GET' && /^\/accounts\/\d+\/proxy$/.test(pathname)) {
+            const index = Number(pathname.split('/')[2])
+            const known = new Set(loadAccounts().map(account => account.index))
+            if (!known.has(index)) {
+                return sendJson(res, 404, { error: `ACCOUNT_${index} is not configured.`, code: 'UNKNOWN_ACCOUNT' })
+            }
+            return sendJson(res, 200, { index, proxy: readAccountProxy(projectRoot, index) })
+        }
+
+        // per-account proxy - write; always edits .env, never config.json
+        if (method === 'PUT' && /^\/accounts\/\d+\/proxy$/.test(pathname)) {
+            if (pm.getStatus().state !== 'idle') {
+                return sendJson(res, 409, {
+                    error: 'Cannot change a proxy while a bot run is active. Stop the run first.',
+                    code: 'RUN_ACTIVE'
+                })
+            }
+
+            const index = Number(pathname.split('/')[2])
+            const known = new Set(loadAccounts().map(account => account.index))
+            if (!known.has(index)) {
+                return sendJson(res, 404, { error: `ACCOUNT_${index} is not configured.`, code: 'UNKNOWN_ACCOUNT' })
+            }
+
+            const body = await readJsonObject(req)
+            const existing = readAccountProxy(projectRoot, index)
+            try {
+                const proxy = validateProxyInput(body, existing)
+                writeAccountProxy(projectRoot, index, proxy)
+                reloadEnvAccounts(projectRoot)
+                pm.note(
+                    'info',
+                    proxy.url
+                        ? `Proxy for ACCOUNT_${index} set to ${proxy.url}:${proxy.port} (HTTP requests: ${proxy.proxyHttp ? 'on' : 'off'}) via API.`
+                        : `Proxy for ACCOUNT_${index} cleared via API.`
+                )
+                return sendJson(res, 200, {
+                    saved: true,
+                    index,
+                    proxy: readAccountProxy(projectRoot, index),
+                    appliesOnNextRun: true
+                })
+            } catch (err) {
+                const status = err.code === 'BAD_REQUEST' ? 400 : 500
+                return sendJson(res, status, { error: err.message, code: err.code })
+            }
         }
 
         // account create; writes ACCOUNT_N_EMAIL into .env
