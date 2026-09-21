@@ -18,7 +18,7 @@ const MIME_TYPES = {
 
 import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
-import { addAccountToEnv, reloadEnvAccounts } from './envAccounts.js'
+import { addAccountToEnv, reloadEnvAccounts, removeAccountFromEnv } from './envAccounts.js'
 import { readAccountProxy, validateProxyInput, writeAccountProxy } from './accountProxy.js'
 import {
     validateConfig,
@@ -188,6 +188,20 @@ function containsControlCharacters(value) {
         const code = character.charCodeAt(0)
         return code < 32 || code === 127
     })
+}
+
+// Session rows are keyed by email, so an orphaned one survives the account being
+// removed from .env and would attach to whoever inherits that index later.
+function deleteSessionsForEmail(projectRoot, email) {
+    const loaded = loadConfigSafe(projectRoot)
+    const sessionPath =
+        loaded?.data && typeof loaded.data.sessionPath === 'string' ? loaded.data.sessionPath : 'sessions'
+    try {
+        return deleteStoredSessions(projectRoot, sessionPath, email)
+    } catch {
+        // A locked or corrupt session DB must not block the .env removal itself.
+        return { found: false, removed: 0 }
+    }
 }
 
 if (containsControlCharacters(HOST) || containsControlCharacters(CORS_ORIGIN)) {
@@ -407,6 +421,10 @@ const requestHandler = async (req, res) => {
                     'GET /errors',
                     'GET /history',
                     'GET /accounts',
+                    'POST /accounts',
+                    'DELETE /accounts/:index',
+                    'GET /accounts/:index/proxy',
+                    'PUT /accounts/:index/proxy',
                     'GET /sessions',
                     'GET /diagnostics',
                     'GET /events',
@@ -566,6 +584,31 @@ const requestHandler = async (req, res) => {
             } catch (err) {
                 if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
                 if (err.code === 'DUPLICATE') return sendJson(res, 409, { error: err.message, code: err.code })
+                return sendJson(res, 500, { error: err.message })
+            }
+        }
+
+        // account delete; removes every ACCOUNT_N_* line from .env
+        if (method === 'DELETE' && /^\/accounts\/\d+$/.test(pathname)) {
+            if (pm.getStatus().state !== 'idle') {
+                return sendJson(res, 409, {
+                    error: 'Cannot remove an account while a bot run is active. Stop the run first.',
+                    code: 'RUN_ACTIVE'
+                })
+            }
+            const index = Number(pathname.split('/')[2])
+            // Resolve the email before the .env line is gone - it is the only key
+            // the session store has, and a stale cookie row outliving the account
+            // would be handed to whoever gets that index next.
+            const email = loadAccounts().find(account => account.index === index)?.email ?? null
+            try {
+                removeAccountFromEnv(projectRoot, index)
+                const sessions = email ? deleteSessionsForEmail(projectRoot, email) : { found: false, removed: 0 }
+                pm.note('info', `ACCOUNT_${index} removed via API.`)
+                return sendJson(res, 200, { removed: true, index, sessionsRemoved: sessions.removed })
+            } catch (err) {
+                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code === 'UNKNOWN_ACCOUNT') return sendJson(res, 404, { error: err.message, code: err.code })
                 return sendJson(res, 500, { error: err.message })
             }
         }
