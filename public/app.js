@@ -603,15 +603,38 @@ function handleAccountCheckbox(index, checked) {
     renderAccounts()
 }
 
-function handleDeleteAccount(index) {
-    if (!confirm('Remove this account from the queue?')) return
+async function handleDeleteAccount(index) {
+    const account = accounts.find(acc => acc.index === index)
+    if (!account) return
 
-    accounts = accounts.filter(acc => acc.index !== index)
-    selectedAccountIndexes.delete(index)
-    saveToLocalStorage()
-    renderAccounts()
-    updateStats()
-    showToast('Account removed', 'success')
+    const label = account.email
+    if (!account.isConfigured) {
+        showToast(`${label} is not in .env yet, so there is nothing to remove.`, 'warning')
+        return
+    }
+    if (!confirm(`Remove ${label} from .env?\n\nThis also deletes its saved sign-in sessions.`)) return
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/accounts/${index}`, { method: 'DELETE' })
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+            showToast(data.error || 'Failed to remove the account', 'error')
+            return
+        }
+
+        // Drop it locally now so the row goes before the next poll lands.
+        accounts = accounts.filter(acc => acc.index !== index)
+        selectedAccountIndexes.delete(index)
+        saveToLocalStorage()
+        renderAccounts()
+        updateStats()
+        const sessions = data.sessionsRemoved ? ` (${data.sessionsRemoved} session rows deleted)` : ''
+        showToast(`${label} removed${sessions}`, 'success')
+        await fetchAccounts()
+    } catch {
+        showToast('Failed to connect to server', 'error')
+    }
 }
 
 async function handleCancelScheduledTask(taskId) {
@@ -655,23 +678,26 @@ function renderAccounts() {
             const isSelected = selectedAccountIndexes.has(account.index)
             return `
             <div class="account-card ${isSelected ? 'selected' : ''}" role="listitem">
-                <input
-                    type="checkbox"
-                    class="account-checkbox"
-                    ${isSelected ? 'checked' : ''}
-                    data-index="${account.index}"
-                    aria-label="Select ${account.email}"
-                >
-                <div class="account-info">
-                    <div class="account-email">${escapeHtml(account.email)}</div>
-                    <div class="account-meta">
-                        <span>Runs: ${account.runs}</span>
-                        ${account.lastRunAt ? `<span>Last: ${formatDate(account.lastRunAt)}</span>` : ''}
-                        ${account.proxy ? `<span class="account-proxy-badge">${escapeHtml(formatProxyLabel(account.proxy))}</span>` : ''}
+                <div class="account-toggle" data-toggle="${account.index}" role="checkbox" tabindex="0"
+                     aria-checked="${isSelected}" aria-label="Select ${escapeHtml(account.email)}">
+                    <input
+                        type="checkbox"
+                        class="account-checkbox"
+                        ${isSelected ? 'checked' : ''}
+                        data-index="${account.index}"
+                        aria-label="Select ${escapeHtml(account.email)}"
+                    >
+                    <div class="account-info">
+                        <div class="account-email">${escapeHtml(account.email)}</div>
+                        <div class="account-meta">
+                            <span>Runs: ${account.runs}</span>
+                            ${account.lastRunAt ? `<span>Last: ${formatDate(account.lastRunAt)}</span>` : ''}
+                            ${account.proxy ? `<span class="account-proxy-badge">${escapeHtml(formatProxyLabel(account.proxy))}</span>` : ''}
+                        </div>
                     </div>
+                    <div class="account-points">${account.points} pts</div>
+                    <span class="account-status ${account.status}">${formatStatus(account.status)}</span>
                 </div>
-                <div class="account-points">${account.points} pts</div>
-                <span class="account-status ${account.status}">${formatStatus(account.status)}</span>
                 <button class="btn btn-secondary" data-index="${account.index}" data-action="proxy">Proxy</button>
                 <button class="btn btn-danger" data-index="${account.index}" data-action="delete">Remove</button>
             </div>
@@ -680,7 +706,30 @@ function renderAccounts() {
         .join('')
 
     // Attach event listeners
-    accountsList.querySelectorAll('.account-checkbox').forEach(checkbox => {
+    accountsList.querySelectorAll('.account-toggle').forEach(row => {
+        const checkbox = row.querySelector('.account-checkbox')
+        const index = parseInt(row.dataset.toggle)
+
+        // Clicking anywhere in the row toggles it. The checkbox is a real one
+        // underneath for keyboard and screen readers; the label-less wrapper
+        // decides the new state from the checkbox itself, not from the click.
+        row.addEventListener('click', e => {
+            // The Proxy and Remove buttons live outside this wrapper, but guard
+            // anyway so a future nesting mistake cannot swallow their clicks.
+            if (e.target.closest('button')) return
+            handleAccountCheckbox(index, !checkbox.checked)
+        })
+
+        row.addEventListener('keydown', e => {
+            if (e.key !== ' ' && e.key !== 'Enter') return
+            if (e.target !== row) return
+            e.preventDefault()
+            handleAccountCheckbox(index, !checkbox.checked)
+        })
+
+        // The checkbox is inside the row, so its own change event would fire
+        // after the row click already toggled. Stop it double-counting.
+        checkbox.addEventListener('click', e => e.stopPropagation())
         checkbox.addEventListener('change', e => {
             handleAccountCheckbox(parseInt(e.target.dataset.index), e.target.checked)
         })

@@ -35,6 +35,41 @@ export function reloadEnvAccounts(projectRoot) {
     }
 }
 
+// Removes every ACCOUNT_N_* line for one index - the email and any proxy block -
+// leaving the file otherwise intact. The index is never recycled: addAccountToEnv
+// picks max(existing) + 1, so the next account added after a removal gets a fresh
+// number rather than inheriting the session cookies of the deleted one.
+export function removeAccountFromEnv(projectRoot, index) {
+    const i = Number(index)
+    if (!Number.isSafeInteger(i) || i < 1) {
+        throw Object.assign(new Error('A positive account index is required.'), { code: 'BAD_REQUEST' })
+    }
+
+    reloadEnvAccounts(projectRoot)
+    if (!process.env[`ACCOUNT_${i}_EMAIL`]) {
+        throw Object.assign(new Error(`ACCOUNT_${i} is not configured.`), { code: 'UNKNOWN_ACCOUNT' })
+    }
+
+    const file = envFilePath(projectRoot)
+    const prefix = `ACCOUNT_${i}_`
+    const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+    const lines = before.split(/\r?\n/)
+    // Keep one trailing empty line so the file still ends with a newline.
+    const kept = lines.filter(line => {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) return true
+        const eq = trimmed.indexOf('=')
+        return eq === -1 || !trimmed.slice(0, eq).trim().startsWith(prefix)
+    })
+
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, kept.join('\n'))
+    fs.renameSync(tmp, file)
+
+    reloadEnvAccounts(projectRoot)
+    return { index: i, envPath: file }
+}
+
 export function addAccountToEnv(projectRoot, email) {
     const normalized = String(email ?? '').trim()
     if (!normalized || normalized.length > 320 || !EMAIL_RE.test(normalized)) {

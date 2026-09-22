@@ -80,6 +80,26 @@ Mật khẩu:         aBcD1234xyz            ← vào ô "Password"
 
 > 💡 **Mẹo tiết kiệm:** mua gói **nhiều proxy cùng lúc** (ví dụ 5 proxy). Thường nhà cung cấp bán theo gói, mua lẻ 1 cái thường đắt hơn nhiều.
 
+### ⚠️ Phân biệt nơi BÁN proxy riêng và nơi cho DANH SÁCH proxy công cộng
+
+Đây là chỗ rất nhiều người mua nhầm. Có **hai loại website hoàn toàn khác nhau**:
+
+| Loại website                                    | Bạn nhận được gì                                     | Dùng cho tool này?      |
+| ----------------------------------------------- | ---------------------------------------------------- | ----------------------- |
+| **Nhà bán proxy riêng** (Webshare, IPRoyal...)  | 1 proxy **riêng của bạn**, có tài khoản/mật khẩu     | ✅ **Đúng thứ bạn cần** |
+| **Danh sách proxy công cộng** (free proxy list) | Hàng nghìn địa chỉ IP dùng chung với **cả thế giới** | ❌ **Đừng dùng**        |
+
+**Vì sao danh sách proxy công cộng không dùng được?**
+
+1. **Ai cũng dùng được** — hàng nghìn người khác cũng đang dùng đúng cái IP đó. Microsoft thấy một IP có 500 người đăng nhập khác nhau thì đó là dấu hiệu xấu, không phải tốt.
+2. **Tốc độ rất chậm và hay chết** — proxy công cộng thường chết sau vài giờ, thậm chí vài phút. Bạn sẽ phải thay liên tục.
+3. **Không có tài khoản/mật khẩu** — nghĩa là bạn không kiểm soát được gì, và không biết ai đang đọc dữ liệu đi qua đó.
+4. **Nhiều cái là mồi** — một số trang cố tình đăng proxy để thu thập dữ liệu người dùng. **Tuyệt đối không đăng nhập tài khoản Microsoft qua proxy công cộng không rõ nguồn.**
+
+> 🚨 **Dấu hiệu nhận biết:** nếu trang web hiển thị một **bảng dài hàng nghìn dòng IP:port** và cho bạn bấm "Copy" miễn phí mà **không hỏi mật khẩu đăng nhập proxy** — đó là danh sách công cộng. Đừng dùng cho tài khoản Microsoft.
+>
+> Ngược lại, trang **bán** proxy sẽ cho bạn **một** địa chỉ duy nhất (hoặc một gói vài cái), kèm **username và password riêng của bạn**.
+
 ---
 
 ## 4. Cách nhập proxy vào Web UI (từng bước)
