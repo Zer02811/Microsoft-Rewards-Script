@@ -6,6 +6,12 @@
             "runtimeExecutable": "npm",
             "runtimeArgs": ["run", "api"],
             "port": 3010
+        },
+        {
+            "name": "web-ui-preview",
+            "runtimeExecutable": "node",
+            "runtimeArgs": ["scripts/api/server.js", "--port", "3011"],
+            "port": 3011
         }
     ]
 }
