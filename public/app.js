@@ -2,6 +2,8 @@
 const API_BASE_URL = 'http://127.0.0.1:3010'
 const POLL_INTERVAL = 5000 // 5 seconds
 const MAX_LOG_LINES = 500
+const TOKEN_KEY = 'control_api_token'
+const UNAUTHORIZED_MESSAGE = 'Unauthorized - the API requires a token. Paste it in the "API token" box in the header.'
 
 // State
 let accounts = []
@@ -9,16 +11,23 @@ let selectedAccountIndexes = new Set()
 let scheduledTasks = []
 let logSource = null
 let proxyAccountIndex = null
+let activeTab = 'logs'
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput')
 const addAccountForm = document.getElementById('addAccountForm')
 const accountsList = document.getElementById('accountsList')
 const serverStatusEl = document.getElementById('serverStatus')
+const apiTokenInput = document.getElementById('apiTokenInput')
 const totalAccountsEl = document.getElementById('totalAccounts')
 const loggedInCountEl = document.getElementById('loggedInCount')
 const notLoggedInCountEl = document.getElementById('notLoggedInCount')
 const expiredCountEl = document.getElementById('expiredCount')
+const pointsBalanceEl = document.getElementById('pointsBalance')
+const pointsCollectedEl = document.getElementById('pointsCollected')
+const pointsAccountsSeenEl = document.getElementById('pointsAccountsSeen')
+const pointsAccountsEl = document.getElementById('pointsAccounts')
+const pointsUpdatedEl = document.getElementById('pointsUpdated')
 const selectAllBtn = document.getElementById('selectAllBtn')
 const runSelectedBtn = document.getElementById('runSelectedBtn')
 const scheduleSelectedBtn = document.getElementById('scheduleSelectedBtn')
@@ -31,6 +40,8 @@ const scheduledList = document.getElementById('scheduledList')
 const logsConsole = document.getElementById('logsConsole')
 const autoScrollToggle = document.getElementById('autoScrollToggle')
 const clearLogsBtn = document.getElementById('clearLogsBtn')
+const historyList = document.getElementById('historyList')
+const errorsList = document.getElementById('errorsList')
 const toast = document.getElementById('toast')
 const proxyForm = document.getElementById('proxyForm')
 const proxyEmpty = document.getElementById('proxyEmpty')
@@ -46,6 +57,9 @@ const proxyClearBtn = document.getElementById('proxyClearBtn')
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    // Restore the token before the first request so it is never sent bare.
+    apiTokenInput.value = localStorage.getItem(TOKEN_KEY) || ''
+
     loadFromLocalStorage()
     loadScheduledTasks()
     setupEventListeners()
@@ -58,6 +72,31 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreToggle('visual_search', visualSearchToggle)
     restoreToggle('edge_browsing', edgeBrowsingToggle)
 })
+
+// The control API can run with API_TOKEN set, which every endpoint then
+// requires. fetch() carries the header; EventSource cannot set headers at all,
+// so the log stream passes the token as ?token= (the only endpoint that allows
+// it) - see tokenFromReq in scripts/api/server.js.
+function authHeaders(extra = {}) {
+    const token = localStorage.getItem(TOKEN_KEY)
+    return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
+}
+
+function apiUrl(path) {
+    return `${API_BASE_URL}${path}`
+}
+
+async function apiFetch(path, options = {}) {
+    const response = await fetch(apiUrl(path), {
+        ...options,
+        headers: authHeaders(options.headers)
+    })
+    if (response.status === 401) {
+        updateServerStatus('unauthorized')
+        showToast(UNAUTHORIZED_MESSAGE, 'error')
+    }
+    return response
+}
 
 function restoreToggle(key, element) {
     const saved = localStorage.getItem(key)
@@ -81,6 +120,33 @@ function setupEventListeners() {
     proxyForm.addEventListener('submit', handleSaveProxy)
     proxyCancelBtn.addEventListener('click', closeProxyEditor)
     proxyClearBtn.addEventListener('click', handleClearProxy)
+    apiTokenInput.addEventListener('change', handleTokenChange)
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectTab(btn.dataset.tab))
+    })
+}
+
+function handleTokenChange() {
+    const token = apiTokenInput.value.trim()
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    else localStorage.removeItem(TOKEN_KEY)
+    // The log stream holds the token in its query string, so it has to reconnect.
+    connectLogStream()
+    checkServerHealth()
+}
+
+function selectTab(name) {
+    activeTab = name
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        const selected = btn.dataset.tab === name
+        btn.classList.toggle('active', selected)
+        btn.setAttribute('aria-selected', String(selected))
+    })
+    document.getElementById('panel-logs').hidden = name !== 'logs'
+    document.getElementById('panel-history').hidden = name !== 'history'
+    document.getElementById('panel-errors').hidden = name !== 'errors'
+    refreshRunPanels()
 }
 
 // Proxy editor — edits ACCOUNT_N_PROXY_* in .env through the control API.
@@ -100,7 +166,7 @@ function openProxyEditor(index) {
     proxyPasswordInput.value = ''
     proxyHttpToggle.checked = false
 
-    fetch(`${API_BASE_URL}/accounts/${index}/proxy`)
+    apiFetch(`/accounts/${index}/proxy`)
         .then(response => (response.ok ? response.json() : Promise.reject(new Error('load failed'))))
         .then(data => {
             // Ignore a response that arrived after the user switched accounts.
@@ -145,7 +211,7 @@ async function saveProxy(body, successMessage) {
     if (index == null) return false
 
     try {
-        const response = await fetch(`${API_BASE_URL}/accounts/${index}/proxy`, {
+        const response = await apiFetch(`/accounts/${index}/proxy`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -183,7 +249,9 @@ function connectLogStream() {
 
     logsConsole.innerHTML = '<div class="log-empty">Connecting to log stream...</div>'
 
-    const source = new EventSource(`${API_BASE_URL}/events?replay=100`)
+    const token = localStorage.getItem(TOKEN_KEY)
+    const url = `${API_BASE_URL}/events?replay=100${token ? `&token=${encodeURIComponent(token)}` : ''}`
+    const source = new EventSource(url)
     logSource = source
 
     source.addEventListener('hello', event => {
@@ -261,21 +329,188 @@ function handleClearLogs() {
 // API Functions
 async function checkServerHealth() {
     try {
-        const response = await fetch(`${API_BASE_URL}/health`)
+        const response = await apiFetch(`/health`)
         const data = await response.json()
 
         if (data.ok) {
             updateServerStatus(data.state === 'running' ? 'running' : 'online')
+            apiTokenInput.placeholder = data.authRequired ? 'required' : 'not required'
             await fetchAccounts()
+            await fetchPoints()
+            await refreshRunPanels()
         }
     } catch {
         updateServerStatus('offline')
     }
 }
 
+// Live point totals straight from the run parser - history only knows what a
+// run already finished, so balances and leftovers live here.
+async function fetchPoints() {
+    try {
+        const response = await apiFetch(`/points`)
+        if (response.status === 401) return
+        const data = await response.json()
+        renderPoints(data)
+    } catch {
+        // Offline; the next poll picks it up.
+    }
+}
+
+function renderPoints(data) {
+    pointsBalanceEl.textContent = data.balance == null ? '—' : data.balance
+    pointsCollectedEl.textContent = data.collected ?? 0
+    pointsAccountsSeenEl.textContent = `${data.accountsSeen ?? 0}/${data.accountsTotal ?? 0}`
+    pointsUpdatedEl.textContent = data.updatedAt
+        ? `Updated ${formatLogTime({ ts: data.updatedAt })}${data.running ? ' · run active' : ''}`
+        : data.running
+          ? 'Run active, no points reported yet'
+          : 'Waiting for a run…'
+
+    const rows = (data.accounts || []).filter(acc => acc.balance != null || acc.collected)
+    if (rows.length === 0) {
+        pointsAccountsEl.innerHTML = '<p class="control-hint">Balances appear here once a run reports them.</p>'
+        return
+    }
+
+    pointsAccountsEl.innerHTML = rows
+        .map(acc => {
+            const sources = Object.entries(acc.bySource || {})
+                .map(([name, value]) => `${escapeHtml(name)} ${value}`)
+                .join(' · ')
+            const earnable = acc.earnable
+                ? ` · earnable ${acc.earnable.mobile}/${acc.earnable.browser}/${acc.earnable.app}`
+                : ''
+            const edge = acc.edgeBrowsing?.status ? ` · Edge ${escapeHtml(acc.edgeBrowsing.status)}` : ''
+            return `
+            <div class="points-row">
+                <div class="points-row-head">
+                    <span class="points-email">${escapeHtml(acc.email)}</span>
+                    <span class="points-balance">${acc.balance == null ? '—' : acc.balance} pts</span>
+                </div>
+                <div class="points-row-meta">
+                    <span>+${acc.collected ?? 0} this run</span>${sources ? `<span>${sources}</span>` : ''}${earnable ? `<span>${earnable}</span>` : ''}${edge ? `<span>${edge}</span>` : ''}
+                    ${acc.error ? `<span class="points-error">${escapeHtml(acc.error)}</span>` : ''}
+                </div>
+            </div>
+        `
+        })
+        .join('')
+}
+
+// History and Errors are tab panels, so they only load when the tab is open.
+async function refreshRunPanels() {
+    if (activeTab === 'history') await fetchHistory()
+    if (activeTab === 'errors') await fetchErrors()
+}
+
+async function fetchHistory() {
+    try {
+        const response = await apiFetch(`/history?limit=20`)
+        if (response.status === 401) return
+        const data = await response.json()
+        renderHistory(data.runs || [])
+    } catch {
+        // leave the last render in place
+    }
+}
+
+function renderHistory(runs) {
+    if (runs.length === 0) {
+        historyList.innerHTML = '<div class="empty-state"><p>No completed runs yet.</p></div>'
+        return
+    }
+
+    historyList.innerHTML = runs
+        .map((run, i) => {
+            const started = run.startedAt ? new Date(run.startedAt).toLocaleString() : 'unknown start'
+            const minutes =
+                run.startedAt && run.endedAt
+                    ? Math.round((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 60000)
+                    : null
+            const accounts = (run.accounts || [])
+                .map(
+                    acc => `
+                <li class="history-account ${acc.success === false ? 'failed' : ''}">
+                    <span class="history-email">${escapeHtml(acc.email)}</span>
+                    <span>+${acc.collected ?? 0}</span>
+                    ${acc.error ? `<span class="history-error">${escapeHtml(acc.error)}</span>` : ''}
+                </li>
+            `
+                )
+                .join('')
+            // run.exit is { code, signal, at } from the API, not a number.
+            const exit = formatExit(run.exit)
+            return `
+            <details class="history-run" ${i === 0 ? 'open' : ''}>
+                <summary>
+                    <span>${escapeHtml(started)}</span>
+                    <span class="history-totals">+${run.collected ?? 0} pts${minutes != null ? ` · ${minutes}m` : ''}${exit ? ` · ${exit}` : ''}</span>
+                </summary>
+                <ul class="history-accounts">${accounts || '<li class="history-account">No accounts recorded.</li>'}</ul>
+            </details>
+        `
+        })
+        .join('')
+}
+
+function formatExit(exit) {
+    if (exit == null) return ''
+    if (typeof exit !== 'object') return `exit ${exit}`
+    if (exit.signal) return `killed (${exit.signal})`
+    return `exit ${exit.code ?? '?'}`
+}
+
+async function fetchErrors() {
+    try {
+        const response = await apiFetch(`/errors?limit=100`)
+        if (response.status === 401) return
+        const data = await response.json()
+        renderErrors(data)
+    } catch {
+        // leave the last render in place
+    }
+}
+
+function renderErrors(data) {
+    const entries = data.errors || []
+    const accountErrors = data.accountErrors || []
+
+    if (entries.length === 0 && accountErrors.length === 0) {
+        errorsList.innerHTML = '<div class="empty-state"><p>No errors or warnings yet.</p></div>'
+        return
+    }
+
+    const accountHtml = accountErrors
+        .map(
+            item => `
+        <div class="error-entry" data-level="error">
+            <span class="log-time">account</span>
+            <span class="log-level">ERROR</span>
+            <span class="log-message">${escapeHtml(item.email)}: ${escapeHtml(item.error)}</span>
+        </div>
+    `
+        )
+        .join('')
+
+    const logHtml = entries
+        .map(
+            entry => `
+        <div class="error-entry" data-level="${escapeHtml(entry.level || 'error')}">
+            <span class="log-time">${formatLogTime(entry)}</span>
+            <span class="log-level">${escapeHtml((entry.level || 'error').toUpperCase())}</span>
+            <span class="log-message">${entry.title ? `[${escapeHtml(entry.title)}] ` : ''}${escapeHtml(entry.message ?? '')}</span>
+        </div>
+    `
+        )
+        .join('')
+
+    errorsList.innerHTML = accountHtml + logHtml
+}
+
 async function fetchAccounts() {
     try {
-        const response = await fetch(`${API_BASE_URL}/accounts`)
+        const response = await apiFetch(`/accounts`)
         const data = await response.json()
 
         if (data.accounts) {
@@ -370,7 +605,7 @@ async function startMultipleAccounts(accountIndexes, options = {}) {
             body.excludedAccountIndexes = excludedIndexes
         }
 
-        const response = await fetch(`${API_BASE_URL}/start`, {
+        const response = await apiFetch(`/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -413,7 +648,7 @@ async function handleAddAccount(e) {
     submitBtn.textContent = 'Adding...'
 
     try {
-        const response = await fetch(`${API_BASE_URL}/accounts`, {
+        const response = await apiFetch(`/accounts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
@@ -514,7 +749,7 @@ async function handleScheduleSelected() {
     const accountEmails = accounts.filter(acc => indexArray.includes(acc.index)).map(acc => acc.email)
 
     try {
-        const response = await fetch(`${API_BASE_URL}/schedule/tasks`, {
+        const response = await apiFetch(`/schedule/tasks`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -571,7 +806,7 @@ async function handleStop() {
     stopBtn.textContent = 'Stopping...'
 
     try {
-        const response = await fetch(`${API_BASE_URL}/stop`, {
+        const response = await apiFetch(`/stop`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ force: false })
@@ -615,7 +850,7 @@ async function handleDeleteAccount(index) {
     if (!confirm(`Remove ${label} from .env?\n\nThis also deletes its saved sign-in sessions.`)) return
 
     try {
-        const response = await fetch(`${API_BASE_URL}/accounts/${index}`, { method: 'DELETE' })
+        const response = await apiFetch(`/accounts/${index}`, { method: 'DELETE' })
         const data = await response.json().catch(() => ({}))
 
         if (!response.ok) {
@@ -641,7 +876,7 @@ async function handleCancelScheduledTask(taskId) {
     if (!confirm('Cancel this scheduled task?')) return
 
     try {
-        const response = await fetch(`${API_BASE_URL}/schedule/tasks/${taskId}`, {
+        const response = await apiFetch(`/schedule/tasks/${taskId}`, {
             method: 'DELETE'
         })
 
@@ -699,6 +934,7 @@ function renderAccounts() {
                     <span class="account-status ${account.status}">${formatStatus(account.status)}</span>
                 </div>
                 <button class="btn btn-secondary" data-index="${account.index}" data-action="proxy">Proxy</button>
+                ${account.status === 'expired' ? `<button class="btn btn-secondary" data-index="${account.index}" data-action="relogin">Re-login</button>` : ''}
                 <button class="btn btn-danger" data-index="${account.index}" data-action="delete">Remove</button>
             </div>
         `
@@ -746,6 +982,46 @@ function renderAccounts() {
             openProxyEditor(parseInt(e.target.dataset.index))
         })
     })
+
+    accountsList.querySelectorAll('[data-action="relogin"]').forEach(btn => {
+        btn.addEventListener('click', e => {
+            handleRelogin(parseInt(e.target.dataset.index))
+        })
+    })
+}
+
+// A stale sign-in is the one failure the UI can actually fix: drop the stored
+// session, then run the account again so the bot signs in from scratch.
+async function handleRelogin(index) {
+    const account = accounts.find(acc => acc.index === index)
+    if (!account) return
+    if (!confirm(`Sign ${account.email} in again?\n\nThis deletes its stored session cookie and starts a fresh run.`))
+        return
+
+    try {
+        const response = await apiFetch(`/sessions/${encodeURIComponent(account.email)}`, { method: 'DELETE' })
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+            showToast(data.error || 'Could not clear the stored session', 'error')
+            return
+        }
+
+        const sessions = data.deleted ? ` (${data.removed} session rows deleted)` : ''
+        showToast(`${account.email}: stored session cleared${sessions}, signing in again...`, 'success')
+
+        runSelectedBtn.disabled = true
+        runSelectedBtn.textContent = 'Signing in...'
+        await startMultipleAccounts([index], {
+            headless: headlessToggle.checked,
+            visualSearch: visualSearchToggle.checked,
+            edgeBrowsing: edgeBrowsingToggle.checked
+        })
+        runSelectedBtn.disabled = false
+        runSelectedBtn.textContent = 'Run Selected'
+    } catch {
+        showToast('Failed to connect to server', 'error')
+    }
 }
 
 function formatProxyLabel(proxy) {
@@ -808,10 +1084,12 @@ function renderScheduledTasks() {
 
 function updateServerStatus(status) {
     serverStatusEl.dataset.status = status
-    serverStatusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1)
+    serverStatusEl.textContent =
+        status === 'unauthorized' ? 'Token needed' : status.charAt(0).toUpperCase() + status.slice(1)
 
     // Stop only makes sense while something is actually running.
     stopBtn.disabled = status !== 'running'
+    // A rejected token is fixable, so leave Run enabled rather than stranding the user.
     runSelectedBtn.disabled = status === 'running'
 }
 
@@ -888,4 +1166,10 @@ function startPolling() {
     setInterval(() => {
         checkServerHealth()
     }, POLL_INTERVAL)
+}
+
+// Node-only export hook so tests/publicUi.test.mjs can exercise the rendering
+// and proxy rules without a browser. Inert in the page (no `module` there).
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { proxyPayload: proxyPayloadFromForm, renderErrors, renderHistory, formatExit }
 }

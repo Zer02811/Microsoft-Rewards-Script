@@ -5,6 +5,7 @@
 }
 
 :root {
+    color-scheme: dark;
     --bg-primary: #0f1117;
     --bg-secondary: #171a23;
     --bg-tertiary: #1e222e;
@@ -18,6 +19,9 @@
     --error: #ef4444;
     --radius: 8px;
     --spacing: 1.5rem;
+    --console-bg: #0b0d12;
+    --console-time: #5a6270;
+    --shadow: rgba(0, 0, 0, 0.4);
 }
 
 body {
@@ -401,7 +405,7 @@ input[type='password'] {
     padding: 1rem 1.5rem;
     border-radius: var(--radius);
     border: 1px solid var(--border);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px var(--shadow);
     transform: translateY(120%);
     transition: transform 0.3s;
     z-index: 1000;
@@ -587,7 +591,7 @@ input[type='password'] {
 }
 
 .logs-console {
-    background: #0b0d12;
+    background: var(--console-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1rem;
@@ -615,7 +619,7 @@ input[type='password'] {
 }
 
 .log-time {
-    color: #5a6270;
+    color: var(--console-time);
     flex-shrink: 0;
 }
 
@@ -693,5 +697,274 @@ input[type='password'] {
 
     .scheduled-task {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ── Header token field ──────────────────────────────────────────────────── */
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.token-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+}
+
+.token-field input {
+    width: 14rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+}
+
+.status-indicator[data-status='unauthorized'] {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning);
+}
+
+/* ── Live points ─────────────────────────────────────────────────────────── */
+
+.points-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.points-updated {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.points-accounts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.points-row {
+    background: var(--bg-tertiary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+}
+
+.points-row-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.points-email {
+    font-weight: 500;
+}
+
+.points-balance {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.points-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.points-error {
+    color: var(--error);
+}
+
+/* ── Tabbed run output ───────────────────────────────────────────────────── */
+
+.tab-list {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.tab-btn {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
+.tab-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.tab-panel[hidden] {
+    display: none;
+}
+
+.history-list,
+.errors-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.history-run {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+}
+
+.history-run summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.history-totals {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.history-accounts {
+    list-style: none;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.history-account {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.history-email {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.history-account.failed .history-email {
+    color: var(--warning);
+}
+
+.history-error {
+    color: var(--error);
+}
+
+.errors-list {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.8125rem;
+    background: var(--console-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+}
+
+.error-entry {
+    display: flex;
+    gap: 0.75rem;
+    word-break: break-word;
+}
+
+.error-entry[data-level='warn'] .log-level,
+.error-entry[data-level='warn'] .log-message {
+    color: var(--warning);
+}
+
+.error-entry[data-level='error'] .log-level,
+.error-entry[data-level='error'] .log-message {
+    color: var(--error);
+}
+
+/* ── Light mode ──────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: light) {
+    :root {
+        color-scheme: light;
+        --bg-primary: #f4f5f7;
+        --bg-secondary: #ffffff;
+        --bg-tertiary: #eceef2;
+        --accent: #2f5fd0;
+        --accent-hover: #2450b8;
+        --text-primary: #14161c;
+        --text-secondary: #5c6270;
+        --border: #d4d8e0;
+        --success: #0b7f5b;
+        --warning: #a35a05;
+        --error: #c02a2a;
+        --console-bg: #f7f8fa;
+        --console-time: #858b99;
+        --shadow: rgba(20, 22, 28, 0.15);
+    }
+
+    .toggle-input:checked + .toggle-switch::after {
+        background: white;
+    }
+
+    .datetime-input::-webkit-calendar-picker-indicator {
+        filter: none;
+    }
+
+    .account-status.logged-in {
+        background: rgba(11, 127, 91, 0.15);
+    }
+
+    .account-status.not-logged-in {
+        background: rgba(192, 42, 42, 0.15);
+    }
+
+    .account-status.expired,
+    .status-indicator[data-status='running'],
+    .status-indicator[data-status='unauthorized'] {
+        background: rgba(163, 90, 5, 0.15);
+    }
+
+    .status-indicator[data-status='online'] {
+        background: rgba(11, 127, 91, 0.15);
+    }
+
+    .status-indicator[data-status='offline'] {
+        background: rgba(192, 42, 42, 0.15);
+    }
+
+    .account-status.running,
+    .scheduled-mode {
+        background: rgba(47, 95, 208, 0.15);
+    }
+
+    .btn-primary,
+    .btn-success,
+    .btn-danger,
+    .btn-stop {
+        color: white;
     }
 }

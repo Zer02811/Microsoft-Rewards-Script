@@ -10,9 +10,21 @@
         <div class="container">
             <header>
                 <h1>Microsoft Rewards Control</h1>
-                <div class="server-status">
-                    <span class="status-label">Server:</span>
-                    <span class="status-indicator" id="serverStatus" data-status="offline">Offline</span>
+                <div class="header-controls">
+                    <label class="token-field" for="apiTokenInput">
+                        <span class="status-label">API token</span>
+                        <input
+                            type="password"
+                            id="apiTokenInput"
+                            placeholder="not required"
+                            autocomplete="off"
+                            title="Only needed when the control API runs with API_TOKEN set."
+                        />
+                    </label>
+                    <div class="server-status">
+                        <span class="status-label">Server:</span>
+                        <span class="status-indicator" id="serverStatus" data-status="offline">Offline</span>
+                    </div>
                 </div>
             </header>
 
@@ -54,6 +66,30 @@
                             <span class="stat-label">Login Expired</span>
                             <span class="stat-value" id="expiredCount">0</span>
                         </div>
+                    </div>
+                </section>
+
+                <section class="points-section">
+                    <div class="points-header">
+                        <h2>Live Points</h2>
+                        <span class="points-updated" id="pointsUpdated">Waiting for a run…</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">Balance</span>
+                            <span class="stat-value" id="pointsBalance">—</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Collected This Run</span>
+                            <span class="stat-value" id="pointsCollected">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Accounts Seen</span>
+                            <span class="stat-value" id="pointsAccountsSeen">0</span>
+                        </div>
+                    </div>
+                    <div id="pointsAccounts" class="points-accounts">
+                        <p class="control-hint">Balances appear here once a run reports them.</p>
                     </div>
                 </section>
 
@@ -187,7 +223,38 @@
 
                 <section class="logs-section">
                     <div class="logs-header">
-                        <h2>Live Logs</h2>
+                        <div class="tab-list" role="tablist" aria-label="Run output">
+                            <button
+                                id="tab-logs"
+                                class="tab-btn active"
+                                role="tab"
+                                aria-selected="true"
+                                aria-controls="panel-logs"
+                                data-tab="logs"
+                            >
+                                Live Logs
+                            </button>
+                            <button
+                                id="tab-history"
+                                class="tab-btn"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="panel-history"
+                                data-tab="history"
+                            >
+                                History
+                            </button>
+                            <button
+                                id="tab-errors"
+                                class="tab-btn"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="panel-errors"
+                                data-tab="errors"
+                            >
+                                Errors
+                            </button>
+                        </div>
                         <div class="logs-controls">
                             <label class="toggle-label">
                                 <input type="checkbox" id="autoScrollToggle" class="toggle-input" checked />
@@ -197,14 +264,29 @@
                             <button id="clearLogsBtn" class="btn btn-secondary">Clear</button>
                         </div>
                     </div>
-                    <div
-                        id="logsConsole"
-                        class="logs-console"
-                        role="log"
-                        aria-live="polite"
-                        aria-label="Live bot logs"
-                        tabindex="0"
-                    ></div>
+
+                    <div id="panel-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-logs">
+                        <div
+                            id="logsConsole"
+                            class="logs-console"
+                            role="log"
+                            aria-live="polite"
+                            aria-label="Live bot logs"
+                            tabindex="0"
+                        ></div>
+                    </div>
+
+                    <div id="panel-history" class="tab-panel" role="tabpanel" aria-labelledby="tab-history" hidden>
+                        <div id="historyList" class="history-list">
+                            <div class="empty-state"><p>No completed runs yet.</p></div>
+                        </div>
+                    </div>
+
+                    <div id="panel-errors" class="tab-panel" role="tabpanel" aria-labelledby="tab-errors" hidden>
+                        <div id="errorsList" class="errors-list">
+                            <div class="empty-state"><p>No errors or warnings yet.</p></div>
+                        </div>
+                    </div>
                 </section>
             </main>
         </div>
