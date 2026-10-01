@@ -34,6 +34,7 @@ const scheduleSelectedBtn = document.getElementById('scheduleSelectedBtn')
 const headlessToggle = document.getElementById('headlessToggle')
 const visualSearchToggle = document.getElementById('visualSearchToggle')
 const edgeBrowsingToggle = document.getElementById('edgeBrowsingToggle')
+const autostartToggle = document.getElementById('autostartToggle')
 const stopBtn = document.getElementById('stopBtn')
 const scheduleTimeInput = document.getElementById('scheduleTime')
 const scheduledList = document.getElementById('scheduledList')
@@ -115,6 +116,7 @@ function setupEventListeners() {
     edgeBrowsingToggle.addEventListener('change', () =>
         localStorage.setItem('edge_browsing', edgeBrowsingToggle.checked)
     )
+    autostartToggle.addEventListener('change', handleAutostartToggle)
     stopBtn.addEventListener('click', handleStop)
     clearLogsBtn.addEventListener('click', handleClearLogs)
     proxyForm.addEventListener('submit', handleSaveProxy)
@@ -338,9 +340,70 @@ async function checkServerHealth() {
             await fetchAccounts()
             await fetchPoints()
             await refreshRunPanels()
+            fetchAutostartStatus()
         }
     } catch {
         updateServerStatus('offline')
+    }
+}
+
+async function fetchAutostartStatus() {
+    try {
+        const response = await apiFetch(`/autostart`)
+        if (response.status === 401) return
+        renderAutostartToggle(await response.json())
+    } catch {
+        // Offline; the next poll picks it up.
+    }
+}
+
+// Reflects server state only - never dispatches 'change', or every page load
+// would PUT the setting straight back.
+function renderAutostartToggle(data) {
+    if (!data.supported) {
+        // Keep the checkbox disabled and explain why in the tooltip, rather
+        // than showing an OFF the user would try to flip.
+        autostartToggle.disabled = true
+        autostartToggle.checked = false
+        autostartToggle.title = data.reason || 'Unavailable on this platform'
+        return
+    }
+    autostartToggle.disabled = false
+    autostartToggle.checked = Boolean(data.enabled)
+    autostartToggle.title = data.stale
+        ? 'The Startup entry points at a different install - toggle off and on to fix it'
+        : ''
+}
+
+async function handleAutostartToggle() {
+    const checked = autostartToggle.checked
+    autostartToggle.disabled = true
+    try {
+        const response = await apiFetch(`/autostart`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: checked })
+        })
+        const data = await response.json().catch(() => ({}))
+        if (response.ok) {
+            renderAutostartToggle(data)
+            showToast(
+                data.enabled
+                    ? 'Start with Windows is on - the control API will launch hidden when you log in.'
+                    : 'Start with Windows is off.',
+                'success'
+            )
+        } else {
+            autostartToggle.checked = !checked
+            autostartToggle.disabled = false
+            if (response.status !== 401) {
+                showToast(data.error || 'Could not update Start with Windows', 'error')
+            }
+        }
+    } catch {
+        autostartToggle.checked = !checked
+        autostartToggle.disabled = false
+        showToast('Failed to connect to server', 'error')
     }
 }
 
