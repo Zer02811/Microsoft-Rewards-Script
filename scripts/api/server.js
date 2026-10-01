@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { spawn } from 'node:child_process'
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -33,6 +34,9 @@ import { readScheduledTasks, addScheduledTask, removeScheduledTask } from './tas
 import { TaskRunner } from './taskRunner.js'
 import { deleteStoredSessions, getSessionLoginStatusMap, listStoredSessions } from './sessionStore.js'
 import { resolveRunCommand } from './runCommand.js'
+import { disableAutostart, enableAutostart, getAutostartStatus, normalizeTarget } from './autostart.js'
+import { TrayController } from './trayControl.js'
+import { TerminalPanel } from './terminalPanel.js'
 import {
     log,
     parseArgs,
@@ -51,7 +55,7 @@ const publicDir = path.join(projectRoot, 'public')
 
 loadEnvFile(projectRoot)
 
-const cliArgs = parseArgs(process.argv.slice(2), { boolean: ['help', 'h'] })
+const cliArgs = parseArgs(process.argv.slice(2), { boolean: ['help', 'h', 'hidden'] })
 
 function printHelp() {
     console.log(`
@@ -65,6 +69,8 @@ Options:
   --host        Listen address. Defaults to API_HOST or 127.0.0.1.
   --port        Listen port from 1 to 65535. Defaults to API_PORT or 3010.
   --token       One-time API token. API_TOKEN from .env takes precedence.
+  --hidden      Windows: hide this terminal into the system tray right away.
+                Used by the "Start with Windows" launcher.
   --help        Show this help.
 
 Examples:
@@ -85,7 +91,7 @@ if (cliArgs.help || cliArgs.h) {
     process.exit(0)
 }
 
-const unknownOptions = findUnknownOptions(cliArgs, ['host', 'port', 'token', 'help', 'h'])
+const unknownOptions = findUnknownOptions(cliArgs, ['host', 'port', 'token', 'hidden', 'help', 'h'])
 if (unknownOptions.length) {
     failUsage(
         `Unknown option${unknownOptions.length === 1 ? '' : 's'}: ${unknownOptions.map(v => `--${v}`).join(', ')}`
@@ -182,6 +188,68 @@ function buildEnvForTask(task) {
 }
 
 const taskRunner = new TaskRunner({ projectRoot, pm, buildEnvForTask })
+
+// --- Start with Windows + hide-to-tray -------------------------------------
+// The Startup entry must relaunch *this* server the same way it runs now, so
+// the target is derived from the live process, not from configuration.
+const WEB_UI_URL = `http://${HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST}:${PORT}`
+
+function autostartTarget() {
+    return normalizeTarget({
+        projectRoot,
+        serverEntry: path.join(__dirname, 'server.js'),
+        host: HOST,
+        port: PORT
+    })
+}
+
+function readAutostartStatus() {
+    try {
+        return getAutostartStatus({ target: autostartTarget() })
+    } catch (error) {
+        return {
+            supported: false,
+            enabled: false,
+            managed: false,
+            stale: false,
+            path: null,
+            entry: null,
+            reason: error.message
+        }
+    }
+}
+
+const tray = new TrayController({
+    scriptPath: path.join(__dirname, 'tray.ps1'),
+    url: WEB_UI_URL,
+    title: 'Microsoft Rewards Script',
+    cwd: projectRoot,
+    log: (level, message) => log(level, message)
+})
+tray.on('hidden', () => pm.note('info', 'Terminal hidden to the system tray - the server keeps running.'))
+tray.on('shown', () => pm.note('info', 'Terminal restored from the system tray.'))
+tray.on('stopRequested', () => void shutdown('tray "Stop and exit"'))
+
+/** Opens a URL with the platform's default browser without blocking the server. */
+function openBrowser(url) {
+    const opener =
+        process.platform === 'win32'
+            ? { command: 'cmd', args: ['/c', 'start', '', url] }
+            : process.platform === 'darwin'
+              ? { command: 'open', args: [url] }
+              : { command: 'xdg-open', args: [url] }
+    const child = spawnDetached(opener.command, opener.args)
+    child?.unref()
+}
+
+function spawnDetached(command, args) {
+    try {
+        return spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true })
+    } catch {
+        return null
+    }
+}
+// ---------------------------------------------------------------------------
 
 function containsControlCharacters(value) {
     return [...value].some(character => {
@@ -432,6 +500,10 @@ const requestHandler = async (req, res) => {
                     'GET /config/diff',
                     'POST /config/sync',
                     'GET /schedule',
+                    'GET /autostart',
+                    'PUT /autostart',
+                    'GET /tray',
+                    'POST /tray/hide',
                     'POST /start',
                     'POST /stop',
                     'POST /restart',
@@ -824,6 +896,41 @@ const requestHandler = async (req, res) => {
             }
         }
 
+        // autostart - read
+        if (method === 'GET' && pathname === '/autostart') {
+            return sendJson(res, 200, readAutostartStatus())
+        }
+
+        // autostart - write
+        if ((method === 'PUT' || method === 'PATCH') && pathname === '/autostart') {
+            const body = await readJsonObject(req)
+            if (typeof body.enabled !== 'boolean') {
+                return sendJson(res, 400, { error: '`enabled` must be a boolean.', code: 'BAD_REQUEST' })
+            }
+            try {
+                const updated = body.enabled ? enableAutostart(autostartTarget()) : disableAutostart()
+                pm.note('info', `Start with Windows ${updated.enabled ? 'enabled' : 'disabled'} via API.`)
+                return sendJson(res, 200, updated)
+            } catch (err) {
+                const status = err.code === 'BAD_REQUEST' ? 400 : err.code === 'CONFLICT' ? 409 : 500
+                return sendJson(res, status, { error: err.message, code: err.code })
+            }
+        }
+
+        // tray - read
+        if (method === 'GET' && pathname === '/tray') {
+            return sendJson(res, 200, tray.getStatus())
+        }
+
+        // tray - hide
+        if (method === 'POST' && pathname === '/tray/hide') {
+            const result = await tray.hide()
+            if (!result.ok) {
+                return sendJson(res, 400, { error: result.error, code: 'BAD_REQUEST' })
+            }
+            return sendJson(res, 200, { ...tray.getStatus(), alreadyHidden: Boolean(result.alreadyHidden) })
+        }
+
         // sse
         if (method === 'GET' && pathname === '/events') {
             return handleEventStream(req, res, url)
@@ -1129,12 +1236,46 @@ server.listen(PORT, HOST, () => {
     // Fire anything already due (server was down when its time passed) without
     // waiting a full tick.
     taskRunner.tick().catch(err => log('ERROR', 'Initial scheduler tick failed:', err.message))
+
+    // One-time panel shown only when started by hand with a real console.
+    // --hidden is what the Startup .vbs passes to avoid showing it at all.
+    if (!cliArgs.hidden) {
+        const panel = new TerminalPanel({
+            url: WEB_UI_URL,
+            tray,
+            getAutostart: readAutostartStatus,
+            toggleAutostart: () =>
+                readAutostartStatus().enabled ? disableAutostart() : enableAutostart(autostartTarget()),
+            openBrowser,
+            onQuit() {
+                void shutdown('panel quit')
+            }
+        })
+        panel.start()
+    }
+
+    const reason = tray.unsupportedReason()
+    if (reason) {
+        log('WARN', 'Hide-to-tray unavailable:', reason)
+    } else if (cliArgs.hidden) {
+        log('INFO', 'Starting hidden - will try to hide the terminal once the server is up.')
+        tray.hide().catch(error => log('ERROR', 'Could not hide to tray at startup:', error.message))
+    } else {
+        log(
+            'INFO',
+            `Hide-to-tray available: press [h] from the control panel to hide the terminal while the server keeps running.`
+        )
+    }
 })
 
 let shuttingDown = false
 async function shutdown(signal, { force = false } = {}) {
     if (shuttingDown) return
     shuttingDown = true
+    // With the console hidden, the helper must outlive this process: it is the
+    // only thing that can remove the tray icon cleanly, and it does so as soon
+    // as it sees this pid disappear.
+    if (!tray.hidden) tray.dispose()
     log('INFO', `${signal} received - shutting down.`)
     taskRunner.stop()
     server.close()
