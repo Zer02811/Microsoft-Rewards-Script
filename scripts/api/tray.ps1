@@ -42,8 +42,6 @@ function Emit([string]$message) {
 }
 
 try {
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
     Add-Type -Namespace MrsTray -Name Native -MemberDefinition @'
 [DllImport("kernel32.dll")]
 public static extern IntPtr GetConsoleWindow();
