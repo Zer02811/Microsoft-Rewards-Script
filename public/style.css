@@ -60,7 +60,9 @@ body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); 
 .status-indicator[data-status='offline'] { background: var(--c-error); }
 .status-indicator[data-status='unauthorized'] { background: var(--c-warning); }
 
-.status-text { font-size: .8rem; color: var(--c-text-dim); }
+.status-label { font-size: .8rem; color: var(--c-text-dim); }
+.status-text { font-size: .8rem; font-weight: 600; }
+.sidebar-card label { display: block; font-size: .75rem; margin-bottom: .25rem; }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: .25rem; flex: 1; }
 .nav-heading { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; color: var(--c-text-dim); padding: .25rem .5rem; }
