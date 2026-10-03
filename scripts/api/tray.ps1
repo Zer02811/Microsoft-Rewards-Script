@@ -25,6 +25,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Windows Forms isn't auto-loaded in PowerShell 7+. Load it explicitly so
+# NotifyIcon, Timer, ContextMenuStrip, etc. are available.
+Add-Type -AssemblyName System.Windows.Forms | Out-Null
+Add-Type -AssemblyName System.Drawing   | Out-Null
+
 $script:Url = $Url
 $script:ServerPid = $ServerPid
 $script:closing = $false
