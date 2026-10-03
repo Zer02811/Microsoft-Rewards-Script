@@ -7,239 +7,257 @@
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
-        <div class="app-container">
+        <div class="app">
+            <!-- ─── Sidebar ─────────────────────────────────────────── -->
             <aside class="sidebar">
-                <div class="sidebar-header">
-                    <h1 class="brand">Rewards Control</h1>
-                    <div class="server-status">
-                        <span class="status-indicator" id="serverStatus" data-status="offline">Offline</span>
-                    </div>
+                <div class="sidebar-brand">
+                    <svg class="brand-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    <h1>Rewards<br/><small>Control Panel</small></h1>
+                </div>
+
+                <div class="sidebar-status">
+                    <span class="status-indicator" id="serverStatus" data-status="offline"></span>
+                    <span class="status-text">Offline</span>
                 </div>
 
                 <nav class="sidebar-nav">
-                    <div class="nav-group">
-                        <span class="nav-label">Accounts</span>
-                        <section class="add-account">
-                            <form id="addAccountForm" aria-label="Add new account">
-                                <div class="form-group">
-                                    <label for="emailInput" class="sr-only">Email address</label>
-                                    <input type="email" id="emailInput" placeholder="email@example.com" required />
-                                </div>
-                                <button type="submit" class="btn btn-primary btn-sm">Add Account</button>
-                            </form>
-                        </section>
-                    </div>
-
-                    <div class="nav-group">
-                        <span class="nav-label">Settings</span>
-                        <section class="controls-section">
-                            <div class="control-group">
-                                <label class="toggle-label">
-                                    <input type="checkbox" id="headlessToggle" class="toggle-input" />
-                                    <span class="toggle-switch"></span>
-                                    <span class="toggle-text">Headless Mode</span>
-                                </label>
-                            </div>
-                            <div class="control-group">
-                                <label class="toggle-label">
-                                    <input type="checkbox" id="visualSearchToggle" class="toggle-input" />
-                                    <span class="toggle-switch"></span>
-                                    <span class="toggle-text">Visual Search</span>
-                                </label>
-                            </div>
-                            <div class="control-group">
-                                <label class="toggle-label">
-                                    <input type="checkbox" id="edgeBrowsingToggle" class="toggle-input" />
-                                    <span class="toggle-switch"></span>
-                                    <span class="toggle-text">Edge Browsing</span>
-                                </label>
-                            </div>
-                            <div class="control-group">
-                                <label class="toggle-label">
-                                    <input type="checkbox" id="autostartToggle" class="toggle-input" disabled />
-                                    <span class="toggle-switch"></span>
-                                    <span class="toggle-text">Start with OS</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label for="scheduleTime">Schedule Run</label>
-                                <input type="datetime-local" id="scheduleTime" class="datetime-input" />
-                            </div>
-                        </section>
-                    </div>
-
-                    <div class="nav-group">
-                        <span class="nav-label">Scheduler</span>
-                        <section class="scheduled-section">
-                            <div id="scheduledList" class="scheduled-list">
-                                <div class="empty-state">No tasks</div>
-                            </div>
-                        </section>
-                    </div>
+                    <span class="nav-heading">Navigation</span>
+                    <a href="#overview" class="nav-item">Overview</a>
+                    <a href="#points" class="nav-item">Live Points</a>
+                    <a href="#queue" class="nav-item">Accounts</a>
+                    <a href="#settings" class="nav-item">Settings</a>
+                    <a href="#proxy" class="nav-item">Proxy</a>
+                    <a href="#scheduled" class="nav-item">Scheduler</a>
+                    <a href="#output" class="nav-item">Logs</a>
                 </nav>
 
-                <div class="sidebar-footer">
-                    <label class="token-field" for="apiTokenInput">
-                        <span class="status-label">API Token</span>
-                        <input type="password" id="apiTokenInput" placeholder="not required" autocomplete="off" />
-                    </label>
-                </div>
-            </aside>
-
-            <main class="main-content">
-                <div id="runningBanner" class="running-banner" role="status" aria-live="polite" hidden>
-                    <span class="live-dot" aria-hidden="true"></span>
-                    <div class="banner-content">
-                        <span class="banner-title" id="bannerText">Running…</span>
-                        <span class="banner-sub" id="bannerSub"></span>
-                    </div>
-                    <div class="banner-progress" aria-hidden="true"><span id="bannerBar"></span></div>
-                </div>
-
-                <div class="topbar">
-                    <h2 class="page-title">Dashboard</h2>
-                    <button id="stopBtn" class="btn btn-danger btn-sm" disabled>Stop Run</button>
-                </div>
-
-                <div class="content-grid">
-                    <section class="dashboard">
-                        <h2 class="section-title">Account Overview</h2>
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <span class="stat-label">Total</span>
-                                <span class="stat-value" id="totalAccounts">0</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label">Logged In</span>
-                                <span class="stat-value" id="loggedInCount">0</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label">Not Logged In</span>
-                                <span class="stat-value" id="notLoggedInCount">0</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label">Expired</span>
-                                <span class="stat-value" id="expiredCount">0</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="points-section">
-                        <div class="points-header">
-                            <h2 class="section-title">Live Points</h2>
-                            <span class="points-updated" id="pointsUpdated">Waiting...</span>
-                        </div>
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <span class="stat-label">Balance</span>
-                                <span class="stat-value" id="pointsBalance">—</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label">Collected</span>
-                                <span class="stat-value" id="pointsCollected">0</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label">Seen</span>
-                                <span class="stat-value" id="pointsAccountsSeen">0</span>
-                            </div>
-                        </div>
-                        <div id="pointsAccounts" class="points-accounts"></div>
-                    </section>
-
-                    <section class="queue-section">
-                        <div class="queue-header">
-                            <h2 class="section-title">Ready to Execute</h2>
-                            <div class="queue-actions">
-                                <button id="selectAllBtn" class="btn btn-secondary btn-sm">All</button>
-                                <button id="runSelectedBtn" class="btn btn-success btn-sm">Run Selected</button>
-                                <button id="scheduleSelectedBtn" class="btn btn-primary btn-sm">Schedule</button>
-                            </div>
-                        </div>
-                        <div id="accountsList" class="accounts-list"></div>
-                    </section>
-
-                    <section class="proxy-section">
-                        <h2 class="section-title">Proxy for <span id="proxyAccountEmail">an account</span></h2>
-                        <div id="proxyEmpty" class="empty-state">
-                            Click <strong>Proxy</strong> on an account row to edit it here.
-                        </div>
-                        <form id="proxyForm" hidden aria-label="Edit account proxy">
-                            <div class="proxy-grid">
-                                <div class="form-group proxy-wide">
-                                    <label for="proxyUrlInput">Proxy address</label>
-                                    <input
-                                        type="text"
-                                        id="proxyUrlInput"
-                                        placeholder="proxy.example.com or socks5://proxy.example.com"
-                                        autocomplete="off"
-                                    />
-                                    <p class="control-hint">
-                                        Include the scheme (<code>http://</code>, <code>socks5://</code>…). Leave blank
-                                        and save to disable.
-                                    </p>
-                                </div>
-                                <div class="form-group">
-                                    <label for="proxyPortInput">Port</label>
-                                    <input type="text" id="proxyPortInput" placeholder="8080" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label for="proxyUsernameInput">Username (optional)</label>
-                                    <input type="text" id="proxyUsernameInput" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label for="proxyPasswordInput">Password (optional)</label>
-                                    <input type="password" id="proxyPasswordInput" autocomplete="new-password" />
-                                    <p class="control-hint" id="proxyPasswordHint">Leave blank to keep the saved password.</p>
-                                </div>
-                                <div class="control-group proxy-wide">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" id="proxyHttpToggle" class="toggle-input" />
-                                        <span class="toggle-switch"></span>
-                                        <span class="toggle-text">API Proxy</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="proxy-actions">
-                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                                <button type="button" id="proxyCancelBtn" class="btn btn-secondary btn-sm">Cancel</button>
-                                <button type="button" id="proxyClearBtn" class="btn btn-danger btn-sm">Clear</button>
+                <div class="sidebar-bottom">
+                    <section class="sidebar-card">
+                        <span class="sidebar-card-label">Add Account</span>
+                        <form id="addAccountForm" aria-label="Add new account">
+                            <div class="form-row">
+                                <input type="email" id="emailInput" name="email" placeholder="email@example.com" required aria-required="true" />
+                                <button type="submit" class="btn btn-primary btn-icon" aria-label="Add account">+</button>
                             </div>
                         </form>
                     </section>
 
-                    <section class="logs-section">
-                        <div class="logs-header">
-                            <div class="tab-list" role="tablist" aria-label="Run output">
-                                <button id="tab-logs" class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-logs" data-tab="logs">Live Logs</button>
-                                <button id="tab-history" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-history" data-tab="history">History</button>
-                                <button id="tab-errors" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-errors" data-tab="errors">Errors</button>
-                            </div>
-                            <div class="logs-controls">
-                                <label class="toggle-label">
-                                    <input type="checkbox" id="autoScrollToggle" class="toggle-input" checked />
-                                    <span class="toggle-switch"></span>
-                                    <span class="toggle-text">Auto-scroll</span>
-                                </label>
-                                <button id="clearLogsBtn" class="btn btn-secondary btn-sm">Clear</button>
-                            </div>
-                        </div>
-                        <div id="panel-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-logs">
-                            <div id="logsConsole" class="logs-console" role="log" aria-live="polite" aria-label="Live bot logs" tabindex="0"></div>
-                        </div>
-                        <div id="panel-history" class="tab-panel" role="tabpanel" aria-labelledby="tab-history" hidden>
-                            <div id="historyList" class="history-list">
-                                <div class="empty-state">No completed runs yet.</div>
-                            </div>
-                        </div>
-                        <div id="panel-errors" class="tab-panel" role="tabpanel" aria-labelledby="tab-errors" hidden>
-                            <div id="errorsList" class="errors-list">
-                                <div class="empty-state">No errors or warnings yet.</div>
-                            </div>
-                        </div>
-                    </section>
+                    <div class="sidebar-token">
+                        <label for="apiTokenInput">API Token</label>
+                        <input type="password" id="apiTokenInput" placeholder="not required" autocomplete="off" title="Only needed when the control API runs with API_TOKEN set." />
+                    </div>
                 </div>
+            </aside>
+
+            <!-- ─── Main ────────────────────────────────────────────── -->
+            <main class="main">
+                <!-- Running banner -->
+                <div id="runningBanner" class="running-banner" role="status" aria-live="polite" hidden>
+                    <span class="live-dot" aria-hidden="true"></span>
+                    <div class="banner-body">
+                        <span id="bannerText">Running…</span>
+                        <span class="banner-sep">·</span>
+                        <span id="bannerSub" class="banner-sub"></span>
+                    </div>
+                    <div class="banner-bar"><span id="bannerBar"></span></div>
+                </div>
+
+                <!-- ── Overview ──────────────────────────────────────── -->
+                <section id="overview" class="panel dashboard">
+                    <h2 class="panel-title">Account Overview</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">Total Accounts</span>
+                            <span class="stat-value" id="totalAccounts">0</span>
+                        </div>
+                        <div class="stat-card stat-success">
+                            <span class="stat-label">Logged In</span>
+                            <span class="stat-value" id="loggedInCount">0</span>
+                        </div>
+                        <div class="stat-card stat-error">
+                            <span class="stat-label">Not Logged In</span>
+                            <span class="stat-value" id="notLoggedInCount">0</span>
+                        </div>
+                        <div class="stat-card stat-warning">
+                            <span class="stat-label">Login Expired</span>
+                            <span class="stat-value" id="expiredCount">0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ── Points ────────────────────────────────────────── -->
+                <section id="points" class="panel points-section">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Live Points</h2>
+                        <span class="points-updated" id="pointsUpdated">Waiting for a run…</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label">Balance</span>
+                            <span class="stat-value" id="pointsBalance">—</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Collected This Run</span>
+                            <span class="stat-value" id="pointsCollected">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Accounts Seen</span>
+                            <span class="stat-value" id="pointsAccountsSeen">0</span>
+                        </div>
+                    </div>
+                    <div id="pointsAccounts" class="points-accounts">
+                        <p class="control-hint">Balances appear here once a run reports them.</p>
+                    </div>
+                </section>
+
+                <!-- ── Queue ─────────────────────────────────────────── -->
+                <section id="queue" class="panel queue-section">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Ready to Execute</h2>
+                        <div class="queue-actions">
+                            <button id="selectAllBtn" class="btn btn-secondary">Select All</button>
+                            <button id="runSelectedBtn" class="btn btn-success">Run Selected</button>
+                            <button id="stopBtn" class="btn btn-stop" disabled>Stop</button>
+                            <button id="scheduleSelectedBtn" class="btn btn-primary">Schedule Run</button>
+                        </div>
+                    </div>
+                    <div id="accountsList" class="accounts-list" role="list">
+                        <div class="empty-state"><p>No accounts configured. Add an account above to get started.</p></div>
+                    </div>
+                </section>
+
+                <!-- ── Settings ──────────────────────────────────────── -->
+                <section id="settings" class="panel controls-section">
+                    <h2 class="panel-title">Execution Settings</h2>
+                    <div class="controls-grid">
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="headlessToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run in Headless Mode</span>
+                            </label>
+                            <p class="control-hint">Browser runs hidden without visible window</p>
+                        </div>
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="visualSearchToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run Visual Search</span>
+                            </label>
+                            <p class="control-hint">Automates Bing Visual Search for daily points</p>
+                        </div>
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="edgeBrowsingToggle" class="toggle-input" />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Run 30-Minute Edge Browsing</span>
+                            </label>
+                            <p class="control-hint">Browses in the background for 30 minutes</p>
+                        </div>
+                        <div class="control-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="autostartToggle" class="toggle-input" disabled />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Start with Windows</span>
+                            </label>
+                            <p class="control-hint">Launch the control API automatically when you log in</p>
+                        </div>
+                        <div class="control-group">
+                            <label for="scheduleTime">Schedule for Later</label>
+                            <input type="datetime-local" id="scheduleTime" class="datetime-input" />
+                            <p class="control-hint">Leave empty to run immediately</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ── Proxy ─────────────────────────────────────────── -->
+                <section id="proxy" class="panel proxy-section">
+                    <h2 class="panel-title">Proxy for <span id="proxyAccountEmail">an account</span></h2>
+                    <div id="proxyEmpty" class="empty-state">
+                        <p>Select an account above, then click <strong>Proxy</strong> on its row to edit it here.</p>
+                    </div>
+                    <form id="proxyForm" hidden aria-label="Edit account proxy">
+                        <div class="proxy-grid">
+                            <div class="form-group proxy-wide">
+                                <label for="proxyUrlInput">Proxy address</label>
+                                <input type="text" id="proxyUrlInput" placeholder="proxy.example.com or socks5://proxy.example.com" autocomplete="off" />
+                                <p class="control-hint">Include the scheme (<code>http://</code>, <code>https://</code>, <code>socks4://</code>, <code>socks5://</code>). Leave blank and save to disable.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="proxyPortInput">Port</label>
+                                <input type="text" id="proxyPortInput" placeholder="8080" autocomplete="off" />
+                                <p class="control-hint">A number from 1 to 65535.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="proxyUsernameInput">Username (optional)</label>
+                                <input type="text" id="proxyUsernameInput" autocomplete="off" />
+                                <p class="control-hint">Not supported for SOCKS proxies.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="proxyPasswordInput">Password (optional)</label>
+                                <input type="password" id="proxyPasswordInput" autocomplete="new-password" />
+                                <p class="control-hint" id="proxyPasswordHint">Leave blank to keep the saved password.</p>
+                            </div>
+                            <div class="control-group proxy-wide">
+                                <label class="toggle-label">
+                                    <input type="checkbox" id="proxyHttpToggle" class="toggle-input" />
+                                    <span class="toggle-switch"></span>
+                                    <span class="toggle-text">Use for API requests too</span>
+                                </label>
+                                <p class="control-hint">On: proxy covers browser <em>and</em> API calls. Off: browser only.</p>
+                            </div>
+                        </div>
+                        <div class="proxy-actions">
+                            <button type="submit" class="btn btn-primary">Save Proxy</button>
+                            <button type="button" id="proxyCancelBtn" class="btn btn-secondary">Close</button>
+                            <button type="button" id="proxyClearBtn" class="btn btn-danger">Remove Proxy</button>
+                        </div>
+                        <p class="control-hint">Changes are saved to <code>.env</code> and apply to the next run.</p>
+                    </form>
+                </section>
+
+                <!-- ── Scheduled ─────────────────────────────────────── -->
+                <section id="scheduled" class="panel scheduled-section">
+                    <h2 class="panel-title">Scheduled Tasks</h2>
+                    <div id="scheduledList" class="scheduled-list">
+                        <div class="empty-state"><p>No scheduled tasks</p></div>
+                    </div>
+                </section>
+
+                <!-- ── Logs ──────────────────────────────────────────── -->
+                <section id="output" class="panel logs-section">
+                    <div class="panel-header">
+                        <div class="tab-list" role="tablist" aria-label="Run output">
+                            <button id="tab-logs" class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-logs" data-tab="logs">Live Logs</button>
+                            <button id="tab-history" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-history" data-tab="history">History</button>
+                            <button id="tab-errors" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-errors" data-tab="errors">Errors</button>
+                        </div>
+                        <div class="logs-controls">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="autoScrollToggle" class="toggle-input" checked />
+                                <span class="toggle-switch"></span>
+                                <span class="toggle-text">Auto-scroll</span>
+                            </label>
+                            <button id="clearLogsBtn" class="btn btn-secondary">Clear</button>
+                        </div>
+                    </div>
+                    <div id="panel-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-logs">
+                        <div id="logsConsole" class="logs-console" role="log" aria-live="polite" aria-label="Live bot logs" tabindex="0"></div>
+                    </div>
+                    <div id="panel-history" class="tab-panel" role="tabpanel" aria-labelledby="tab-history" hidden>
+                        <div id="historyList" class="history-list">
+                            <div class="empty-state"><p>No completed runs yet.</p></div>
+                        </div>
+                    </div>
+                    <div id="panel-errors" class="tab-panel" role="tabpanel" aria-labelledby="tab-errors" hidden>
+                        <div id="errorsList" class="errors-list">
+                            <div class="empty-state"><p>No errors or warnings yet.</p></div>
+                        </div>
+                    </div>
+                </section>
             </main>
         </div>
+
         <div id="toast" class="toast" role="alert" aria-live="polite"></div>
         <script src="app.js"></script>
     </body>

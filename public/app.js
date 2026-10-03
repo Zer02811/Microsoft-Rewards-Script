@@ -12,6 +12,8 @@ let scheduledTasks = []
 let logSource = null
 let proxyAccountIndex = null
 let activeTab = 'logs'
+let currentRunningAccount = null
+let currentRunningTask = null
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput')
@@ -276,7 +278,6 @@ function connectLogStream() {
     source.addEventListener('status', event => {
         const status = JSON.parse(event.data)
         updateServerStatus(status.state === 'running' ? 'running' : 'online')
-        updateRunningBanner(status.state)
     })
 
     source.onerror = () => {
@@ -373,7 +374,6 @@ async function checkServerHealth() {
 
         if (data.ok) {
             updateServerStatus(data.state === 'running' ? 'running' : 'online')
-            updateRunningBanner(data.state)
             apiTokenInput.placeholder = data.authRequired ? 'required' : 'not required'
             await fetchAccounts()
             await fetchPoints()
@@ -1186,8 +1186,13 @@ function renderScheduledTasks() {
 
 function updateServerStatus(status) {
     serverStatusEl.dataset.status = status
-    serverStatusEl.textContent =
-        status === 'unauthorized' ? 'Token needed' : status.charAt(0).toUpperCase() + status.slice(1)
+    // Update sibling text (new layout uses a dot + text span)
+    const textEl = serverStatusEl.parentElement?.querySelector('.status-text')
+    const label = status === 'unauthorized' ? 'Token needed' : status.charAt(0).toUpperCase() + status.slice(1)
+    if (textEl) textEl.textContent = label
+    else serverStatusEl.textContent = label
+
+    updateRunningBanner(status === 'running' ? 'running' : 'offline')
 
     // Stop only makes sense while something is actually running.
     stopBtn.disabled = status !== 'running'
