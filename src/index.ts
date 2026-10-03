@@ -14,7 +14,7 @@ import type { PageSnapshot } from './browser/ReactFunc'
 import { IpcLog, Logger } from './logging/Logger'
 import Utils, { isBrowserClosedError } from './util/Utils'
 import { loadAccounts, loadConfig } from './util/Load'
-import { closeSessionStore, loadResolvedRegion, saveResolvedRegion } from './util/SessionStore'
+import { closeSessionStore, hasLiveAuthSession, loadResolvedRegion, saveResolvedRegion } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
 import { abortRun, abortSignal, isAborted, isAbortError } from './util/Abort'
 import { normalizeCountry, resolveAccountLocale } from './util/Locale'
@@ -646,6 +646,13 @@ export class MicrosoftRewardsBot {
             })
         }
 
+        // Desktop login normally waits until mobile tasks finish (10-15 min later).
+        // When the saved desktop session is dead, log in right after mobile instead.
+        const desktopMayBeNeeded =
+            this.config.workers.doPunchCards || this.config.workers.doVisualSearch || !apiSearch
+        const preloginDesktop =
+            desktopMayBeNeeded && !hasLiveAuthSession(this.config.sessionPath, accountEmail, false)
+
         try {
             return await executionContext.run({ isMobile: true, account }, async () => {
                 mobileSession = await this.browserFactory.createBrowser(account)
@@ -672,6 +679,14 @@ export class MicrosoftRewardsBot {
                 await this.browser.func.checkpointActiveSession('LOGIN-CHECKPOINT')
                 this.cookies.mobile = await initialContext.cookies()
                 this.fingerprintMobile = mobileSession.fingerprint
+
+                if (preloginDesktop) {
+                    this.logger.info('main', 'FLOW', 'Desktop session missing/expired; logging in now before tasks')
+                    await executionContext.run({ isMobile: false, account }, async () => {
+                        desktopSession = await this.createDesktopSession(account)
+                    })
+                    await closeDesktopSession()
+                }
 
                 if (fullApi) {
                     await closeMobileSession()
