@@ -115,6 +115,23 @@ export function loadSession(
     }
 }
 
+// Cookies Microsoft only sets once signed in (mirrors scripts/api/sessionStore.js).
+const AUTH_COOKIES: Array<[name: string, domain: string]> = [
+    ['MSPAuth', 'live.com'],
+    ['MSPProf', 'live.com'],
+    ['WLSSC', 'live.com'],
+    ['RPSSecAuth', 'live.com'],
+    ['_U', 'bing.com']
+]
+
+export function hasLiveAuthSession(sessionPath: string, email: string, isMobile: boolean): boolean {
+    const cookies = loadSession(sessionPath, email, isMobile)?.storageState?.cookies ?? []
+    return cookies.some(cookie => {
+        const domain = cookie.domain.replace(/^\./, '').toLowerCase()
+        return AUTH_COOKIES.some(([name, d]) => cookie.name === name && (domain === d || domain.endsWith(`.${d}`)))
+    })
+}
+
 export function saveStorageState(
     sessionPath: string,
     email: string,

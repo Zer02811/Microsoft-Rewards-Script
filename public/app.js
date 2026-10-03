@@ -56,6 +56,13 @@ const proxyHttpToggle = document.getElementById('proxyHttpToggle')
 const proxyCancelBtn = document.getElementById('proxyCancelBtn')
 const proxyClearBtn = document.getElementById('proxyClearBtn')
 
+// Banner elements
+const runningBanner = document.getElementById('runningBanner')
+const bannerText = document.getElementById('bannerText')
+const bannerSub = document.getElementById('bannerSub')
+const bannerBar = document.getElementById('bannerBar')
+
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     // Restore the token before the first request so it is never sent bare.
@@ -269,6 +276,7 @@ function connectLogStream() {
     source.addEventListener('status', event => {
         const status = JSON.parse(event.data)
         updateServerStatus(status.state === 'running' ? 'running' : 'online')
+        updateRunningBanner(status.state)
     })
 
     source.onerror = () => {
@@ -282,7 +290,36 @@ function connectLogStream() {
     window.addEventListener('beforeunload', () => source.close())
 }
 
+function updateRunningBanner(status, liveData = null) {
+    if (status !== 'running') {
+        runningBanner.hidden = true
+        return
+    }
+    runningBanner.hidden = false
+
+    const total = accounts.length
+    const runningCount = accounts.filter(acc => acc.status === 'running').length
+    bannerText.textContent = `Running ${runningCount}/${total} accounts`
+
+    if (liveData && liveData.currentAccount) {
+        bannerSub.textContent = `Account: ${liveData.currentAccount}`
+    } else if (currentRunningAccount) {
+        bannerSub.textContent = `Account: ${currentRunningAccount}`
+    } else {
+        bannerSub.textContent = 'Initializing...'
+    }
+}
+
 function appendLogLine(entry) {
+    // Update live status based on log content
+    if (entry.title === 'FLOW') {
+        const match = entry.message.match(/Starting session for (\S+)/)
+        if (match) currentRunningAccount = match[1]
+    } else if (entry.title && entry.title !== 'INFO' && entry.title !== 'WARN' && entry.title !== 'ERROR' && entry.title !== 'DEBUG') {
+        currentRunningTask = entry.title
+        updateRunningBanner('running')
+    }
+
     const empty = logsConsole.querySelector('.log-empty')
     if (empty) empty.remove()
 
@@ -336,6 +373,7 @@ async function checkServerHealth() {
 
         if (data.ok) {
             updateServerStatus(data.state === 'running' ? 'running' : 'online')
+            updateRunningBanner(data.state)
             apiTokenInput.placeholder = data.authRequired ? 'required' : 'not required'
             await fetchAccounts()
             await fetchPoints()
@@ -415,6 +453,7 @@ async function fetchPoints() {
         if (response.status === 401) return
         const data = await response.json()
         renderPoints(data)
+        updateRunningBanner(data.running ? 'running' : 'idle', data)
     } catch {
         // Offline; the next poll picks it up.
     }
