@@ -91,7 +91,23 @@ body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); 
 .sidebar-token label { display: block; font-size: .75rem; color: var(--c-text-dim); margin-bottom: .25rem; }
 
 /* ─── Main ───────────────────────────────────────────────────────────────── */
-.main { overflow-y: auto; padding: var(--gap); display: flex; flex-direction: column; gap: var(--gap); }
+.main { overflow-y: auto; padding: var(--gap) 1.5rem 2rem; display: flex; flex-direction: column; gap: var(--gap); scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--c-border) transparent; }
+/* Flex column children default to shrinking; that squashed the banner to ~19px and clipped panels. */
+.main > * { flex-shrink: 0; scroll-margin-top: var(--gap); width: 100%; max-width: 1200px; margin-inline: auto; }
+.sidebar { scrollbar-width: thin; scrollbar-color: var(--c-border) transparent; }
+.panel-title { letter-spacing: -.01em; }
+.stat-value { font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.points-balance, .account-points { font-variant-numeric: tabular-nums; }
+.control-hint { text-wrap: pretty; max-width: 65ch; }
+.control-group .control-hint { margin-top: .25rem; padding-left: calc(36px + .5rem); }
+.controls-grid > .control-group:last-child .control-hint { padding-left: 0; }
+.controls-grid > .control-group { margin-bottom: 0; }
+.controls-grid > .control-group:last-child { display: flex; flex-direction: column; gap: .3rem; }
+input:focus-visible, .datetime-input:focus-visible { box-shadow: 0 0 0 3px var(--c-accent-dim); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible, .nav-item:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.btn { transition: filter .15s, opacity .15s, transform .1s; }
+@media (prefers-reduced-motion: reduce) { .main { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 /* ─── Running Banner ─────────────────────────────────────────────────────── */
 .running-banner {
