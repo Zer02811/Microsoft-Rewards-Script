@@ -80,6 +80,33 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreToggle('headless_mode', headlessToggle)
     restoreToggle('visual_search', visualSearchToggle)
     restoreToggle('edge_browsing', edgeBrowsingToggle)
+
+    // Scroll spy: highlight nav item matching the visible section
+    const mainEl = document.querySelector('.main')
+    const navLinks = [...document.querySelectorAll('.nav-item[href^="#"]')]
+    const sections = navLinks.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean)
+
+    // Smooth scroll for nav links
+    navLinks.forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault()
+            const target = document.querySelector(a.getAttribute('href'))
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+    })
+
+    const updateActiveNav = () => {
+        const threshold = mainEl.scrollTop + 80
+        let active = sections[0]
+        for (const s of sections) {
+            if (s.offsetTop <= threshold) active = s
+        }
+        navLinks.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === `#${active?.id}`)
+        })
+    }
+    mainEl.addEventListener('scroll', updateActiveNav, { passive: true })
+    updateActiveNav()
 })
 
 // The control API can run with API_TOKEN set, which every endpoint then
