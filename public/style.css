@@ -211,6 +211,9 @@ input::placeholder { color: var(--c-text-dim); }
 .toggle-input:checked + .toggle-switch { background: var(--c-accent); border-color: var(--c-accent); }
 .toggle-input:checked + .toggle-switch::after { transform: translateX(16px); background: #fff; }
 .toggle-input:focus-visible + .toggle-switch { outline: 2px solid var(--c-text); outline-offset: 2px; }
+.toggle-input:disabled + .toggle-switch { opacity: .4; cursor: not-allowed; }
+.toggle-input:disabled ~ .toggle-text { opacity: .4; }
+.toggle-label:has(.toggle-input:disabled) { cursor: not-allowed; }
 .toggle-text { font-size: .85rem; font-weight: 500; color: var(--c-text); }
 
 /* ─── Controls Grid ──────────────────────────────────────────────────────── */
