@@ -25,10 +25,13 @@
     --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 }
 
-body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); font-size: 14px; line-height: 1.5; height: 100vh; overflow: hidden; }
+/* Only .sidebar and .main scroll. If html could scroll, focusing a control
+   shifted the whole page and left a black strip that survived refresh. */
+html, body { height: 100%; overflow: hidden; }
+body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); font-size: 14px; line-height: 1.5; }
 
 /* ─── Layout ─────────────────────────────────────────────────────────────── */
-.app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
+.app { display: grid; grid-template-columns: 260px 1fr; height: 100%; }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────── */
 .sidebar {
@@ -196,8 +199,10 @@ input::placeholder { color: var(--c-text-dim); }
 
 /* ─── Toggle ─────────────────────────────────────────────────────────────── */
 .control-group { margin-bottom: .75rem; }
-.toggle-label { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
-.toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+/* position:relative keeps the absolute-positioned .toggle-input inside the label
+   so the browser does NOT try to scroll the viewport to reveal the focused input. */
+.toggle-label { display: flex; align-items: center; gap: .5rem; cursor: pointer; position: relative; }
+.toggle-input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 .toggle-switch {
     position: relative; width: 36px; height: 20px;
     background: var(--c-surface-active); border: 1px solid var(--c-border);
@@ -236,7 +241,8 @@ input::placeholder { color: var(--c-text-dim); }
 .btn-success { background: var(--c-success); color: #fff; }
 .btn-danger { background: var(--c-error); color: #fff; }
 .btn-stop { background: var(--c-error); color: #fff; }
-.btn-icon { width: 36px; padding: 0; font-size: 1.1rem; }
+/* Square, same height as the input beside it; line-height 1 centres the glyph. */
+.btn-icon { width: 36px; height: 36px; padding: 0; font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
 
 /* ─── Proxy ──────────────────────────────────────────────────────────────── */
 .proxy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
