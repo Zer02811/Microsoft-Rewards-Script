@@ -12,6 +12,7 @@ let scheduledTasks = []
 let logSource = null
 let proxyAccountIndex = null
 let activeTab = 'logs'
+let lastPoints = null // last /points response, feeds the running banner
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput')
@@ -79,6 +80,33 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreToggle('headless_mode', headlessToggle)
     restoreToggle('visual_search', visualSearchToggle)
     restoreToggle('edge_browsing', edgeBrowsingToggle)
+
+    // Scroll spy: highlight nav item matching the visible section
+    const mainEl = document.querySelector('.main')
+    const navLinks = [...document.querySelectorAll('.nav-item[href^="#"]')]
+    const sections = navLinks.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean)
+
+    // Smooth scroll for nav links
+    navLinks.forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault()
+            const target = document.querySelector(a.getAttribute('href'))
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
+    })
+
+    const updateActiveNav = () => {
+        const threshold = mainEl.scrollTop + 80
+        let active = sections[0]
+        for (const s of sections) {
+            if (s.offsetTop <= threshold) active = s
+        }
+        navLinks.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === `#${active?.id}`)
+        })
+    }
+    mainEl.addEventListener('scroll', updateActiveNav, { passive: true })
+    updateActiveNav()
 })
 
 // The control API can run with API_TOKEN set, which every endpoint then
@@ -276,7 +304,6 @@ function connectLogStream() {
     source.addEventListener('status', event => {
         const status = JSON.parse(event.data)
         updateServerStatus(status.state === 'running' ? 'running' : 'online')
-        updateRunningBanner(status.state)
     })
 
     source.onerror = () => {
@@ -290,36 +317,20 @@ function connectLogStream() {
     window.addEventListener('beforeunload', () => source.close())
 }
 
-function updateRunningBanner(status, liveData = null) {
-    if (status !== 'running') {
-        runningBanner.hidden = true
-        return
-    }
-    runningBanner.hidden = false
+// Banner content comes from the last /points snapshot (the server's log parser
+// already tracks the current account); status events only show or hide it.
+function updateRunningBanner(running) {
+    runningBanner.hidden = !running
+    if (!running) return
 
-    const total = accounts.length
-    const runningCount = accounts.filter(acc => acc.status === 'running').length
-    bannerText.textContent = `Running ${runningCount}/${total} accounts`
-
-    if (liveData && liveData.currentAccount) {
-        bannerSub.textContent = `Account: ${liveData.currentAccount}`
-    } else if (currentRunningAccount) {
-        bannerSub.textContent = `Account: ${currentRunningAccount}`
-    } else {
-        bannerSub.textContent = 'Initializing...'
-    }
+    const seen = lastPoints?.accountsSeen ?? 0
+    const total = lastPoints?.accountsTotal || accounts.length
+    bannerText.textContent = `Running account ${Math.max(seen, 1)}/${total}`
+    bannerSub.textContent = lastPoints?.currentAccount || 'Starting…'
+    bannerBar.style.width = total ? `${Math.min(100, (seen / total) * 100)}%` : '0%'
 }
 
 function appendLogLine(entry) {
-    // Update live status based on log content
-    if (entry.title === 'FLOW') {
-        const match = entry.message.match(/Starting session for (\S+)/)
-        if (match) currentRunningAccount = match[1]
-    } else if (entry.title && entry.title !== 'INFO' && entry.title !== 'WARN' && entry.title !== 'ERROR' && entry.title !== 'DEBUG') {
-        currentRunningTask = entry.title
-        updateRunningBanner('running')
-    }
-
     const empty = logsConsole.querySelector('.log-empty')
     if (empty) empty.remove()
 
@@ -373,7 +384,6 @@ async function checkServerHealth() {
 
         if (data.ok) {
             updateServerStatus(data.state === 'running' ? 'running' : 'online')
-            updateRunningBanner(data.state)
             apiTokenInput.placeholder = data.authRequired ? 'required' : 'not required'
             await fetchAccounts()
             await fetchPoints()
@@ -452,8 +462,9 @@ async function fetchPoints() {
         const response = await apiFetch(`/points`)
         if (response.status === 401) return
         const data = await response.json()
+        lastPoints = data
         renderPoints(data)
-        updateRunningBanner(data.running ? 'running' : 'idle', data)
+        updateRunningBanner(Boolean(data.running))
     } catch {
         // Offline; the next poll picks it up.
     }
@@ -1186,8 +1197,13 @@ function renderScheduledTasks() {
 
 function updateServerStatus(status) {
     serverStatusEl.dataset.status = status
-    serverStatusEl.textContent =
-        status === 'unauthorized' ? 'Token needed' : status.charAt(0).toUpperCase() + status.slice(1)
+    // Update sibling text (new layout uses a dot + text span)
+    const textEl = serverStatusEl.parentElement?.querySelector('.status-text')
+    const label = status === 'unauthorized' ? 'Token needed' : status.charAt(0).toUpperCase() + status.slice(1)
+    if (textEl) textEl.textContent = label
+    else serverStatusEl.textContent = label
+
+    updateRunningBanner(status === 'running')
 
     // Stop only makes sense while something is actually running.
     stopBtn.disabled = status !== 'running'
