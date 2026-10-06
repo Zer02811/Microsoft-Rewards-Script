@@ -763,7 +763,7 @@ export class MicrosoftRewardsBot {
                             'LOGIN-APP',
                             `App dashboard unavailable - app activities will be skipped this run | message=${error instanceof Error ? error.message : String(error)}`
                         )
-                        this.accessToken = ''
+                        // ponytail: don't clear accessToken — edge browsing uses a different endpoint and may still work
                     }
                 }
 
@@ -783,7 +783,6 @@ export class MicrosoftRewardsBot {
                             'LOGIN-APP',
                             `App earnable-points lookup failed - app activities will be skipped this run | message=${error instanceof Error ? error.message : String(error)}`
                         )
-                        this.accessToken = ''
                         appData = null
                     }
                 }

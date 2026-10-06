@@ -117,29 +117,43 @@ export default class BrowserFunc {
     }
 
     async getAppDashboardData(): Promise<AppDashboardData> {
-        try {
-            const request: HttpRequestConfig = {
-                url: URLs.platform.me('SAIOS'),
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent': BING_APP_USER_AGENT,
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': this.bot.userData.langCode,
-                    'X-Rewards-IsMobile': 'true'
+        let lastError: unknown
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const request: HttpRequestConfig = {
+                    url: URLs.platform.me('SAIOS'),
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${this.bot.accessToken}`,
+                        'User-Agent': BING_APP_USER_AGENT,
+                        'X-Rewards-Country': this.bot.userData.geoLocale,
+                        'X-Rewards-Language': this.bot.userData.langCode,
+                        'X-Rewards-IsMobile': 'true'
+                    }
                 }
-            }
 
-            const response = await this.bot.http.request(request)
-            return response.data as AppDashboardData
-        } catch (error) {
-            this.bot.logger.error(
-                this.bot.isMobile,
-                'GET-APP-DASHBOARD-DATA',
-                `Error fetching dashboard data: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+                const response = await this.bot.http.request(request)
+                return response.data as AppDashboardData
+            } catch (error) {
+                lastError = error
+                const httpStatus = (error as { response?: { status?: number } })?.response?.status
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'GET-APP-DASHBOARD-DATA',
+                    `Attempt ${attempt}/3 failed | status=${httpStatus ?? 'unknown'} | ${error instanceof Error ? error.message : String(error)}`
+                )
+                // ponytail: break on 401 — token invalid, retrying wastes time; re-obtain token if needed
+                if (httpStatus === 401) break
+                if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 2000))
+            }
         }
+
+        this.bot.logger.error(
+            this.bot.isMobile,
+            'GET-APP-DASHBOARD-DATA',
+            `Error fetching dashboard data: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+        )
+        throw lastError
     }
 
     async getBrowserEarnablePoints(data?: DashboardData): Promise<BrowserEarnablePoints> {
