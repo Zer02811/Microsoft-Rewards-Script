@@ -103,7 +103,7 @@ export class Login {
                     waitUntil: 'domcontentloaded'
                 })
                 .catch(() => {})
-            await this.bot.utils.wait(2000)
+            await this.bot.utils.wait(500)
             await this.bot.browser.utils.reloadBadPage(page)
             await this.bot.browser.utils.disableFido(page)
 
@@ -139,7 +139,7 @@ export class Login {
                             `Stuck in state "${state}" for 4 loops, refreshing page`
                         )
                         await page.reload({ waitUntil: 'domcontentloaded' })
-                        await this.bot.utils.wait(3000)
+                        await this.bot.utils.wait(1000)
                         sameStateCount = 0
                         previousState = 'UNKNOWN'
                         continue
@@ -159,7 +159,7 @@ export class Login {
                     throw new Error(`Login failed or aborted at state: ${state}`)
                 }
 
-                await this.bot.utils.wait(1000)
+                await this.bot.utils.wait(300)
             }
 
             if (iteration >= maxIterations) {

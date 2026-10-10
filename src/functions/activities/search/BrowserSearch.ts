@@ -26,8 +26,11 @@ interface SessionStats {
 
 export class Search extends BaseActivity {
     private searchCount = 0
+    private dashboardCache: { timestamp: number } | null = null
+    private readonly DASHBOARD_CACHE_MS = 3000
 
     public async doSearch(page: Page, isMobile: boolean): Promise<number> {
+        this.dashboardCache = null
         const startBalance = Number(this.bot.userData.currentPoints ?? 0)
         this.bot.logger.info(isMobile, 'SEARCH-BING', `Starting Bing searches | currentBalance=${startBalance}`)
 
@@ -55,6 +58,7 @@ export class Search extends BaseActivity {
     }
 
     public async doBonusSearches(page: Page): Promise<number> {
+        this.dashboardCache = null
         const isMobile = this.bot.isMobile
         const tracker = new BonusTracker(this.bot, isMobile)
 
@@ -118,7 +122,7 @@ export class Search extends BaseActivity {
                 stats.performed++
 
                 await this.bot.browser.func.synchronizeActiveBrowserCookies('SEARCH-COOKIE-CAPTURE')
-                const gained = await tracker.measure()
+                const gained = await this.measureWithCache(tracker)
                 if (gained > 0) {
                     stats.stagnant = 0
                     stats.totalGained += gained
@@ -236,6 +240,16 @@ export class Search extends BaseActivity {
                 `Failed during random click | ${error instanceof Error ? error.message : String(error)}`
             )
         }
+    }
+
+    private async measureWithCache(tracker: SearchTracker): Promise<number> {
+        const now = Date.now()
+        if (this.dashboardCache && now - this.dashboardCache.timestamp < this.DASHBOARD_CACHE_MS) {
+            return 0
+        }
+        const gained = await tracker.measure()
+        this.dashboardCache = { timestamp: now }
+        return gained
     }
 }
 

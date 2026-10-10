@@ -758,12 +758,35 @@ export class MicrosoftRewardsBot {
                     try {
                         appData = await this.browser.func.getAppDashboardData()
                     } catch (error) {
-                        this.logger.warn(
-                            'main',
-                            'LOGIN-APP',
-                            `App dashboard unavailable - app activities will be skipped this run | message=${error instanceof Error ? error.message : String(error)}`
-                        )
-                        // ponytail: don't clear accessToken — edge browsing uses a different endpoint and may still work
+                        const httpStatus = typeof error === 'object' && error !== null && 'status' in error
+                            ? (error as { status?: number }).status
+                            : undefined
+                        // ponytail: re-acquire token once on 401 — OAuth code may have been stale
+                        if (httpStatus === 401 && this.mainMobilePage && !this.mainMobilePage.isClosed()) {
+                            this.logger.warn(
+                                'main',
+                                'LOGIN-APP',
+                                'App dashboard returned 401 - re-acquiring mobile access token'
+                            )
+                            try {
+                                this.accessToken = await this.login.getAppAccessToken(this.mainMobilePage, accountEmail)
+                                if (this.accessToken) {
+                                    appData = await this.browser.func.getAppDashboardData()
+                                }
+                            } catch (retryError) {
+                                this.logger.warn(
+                                    'main',
+                                    'LOGIN-APP',
+                                    `App dashboard unavailable after token re-acquisition | message=${retryError instanceof Error ? retryError.message : String(retryError)}`
+                                )
+                            }
+                        } else {
+                            this.logger.warn(
+                                'main',
+                                'LOGIN-APP',
+                                `App dashboard unavailable - app activities will be skipped this run | message=${error instanceof Error ? error.message : String(error)}`
+                            )
+                        }
                     }
                 }
 

@@ -158,7 +158,9 @@ export default class BrowserFunc {
 
     async getBrowserEarnablePoints(data?: DashboardData): Promise<BrowserEarnablePoints> {
         try {
-            data ??= await this.getDashboardData()
+            if (!data) {
+                data = await this.getDashboardData()
+            }
 
             const desktopSearchPoints =
                 data.dashboard.userStatus.counters.pcSearch?.reduce(
