@@ -956,10 +956,19 @@ async function handleDeleteAccount(index) {
     if (!account) return
 
     const label = account.email
+
+    // Not in .env yet — just drop it from the local list.
     if (!account.isConfigured) {
-        showToast(`${label} is not in .env yet, so there is nothing to remove.`, 'warning')
+        if (!confirm(`Remove ${label} from your account list?`)) return
+        accounts = accounts.filter(acc => acc.index !== index)
+        selectedAccountIndexes.delete(index)
+        saveToLocalStorage()
+        renderAccounts()
+        updateStats()
+        showToast(`${label} removed`, 'success')
         return
     }
+
     if (!confirm(`Remove ${label} from .env?\n\nThis also deletes its saved sign-in sessions.`)) return
 
     try {
