@@ -16,6 +16,7 @@ let lastPoints = null // last /points response, feeds the running banner
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput')
+const passwordInput = document.getElementById('passwordInput')
 const addAccountForm = document.getElementById('addAccountForm')
 const accountsList = document.getElementById('accountsList')
 const serverStatusEl = document.getElementById('serverStatus')
@@ -745,6 +746,7 @@ async function handleAddAccount(e) {
     e.preventDefault()
 
     const email = emailInput.value.trim()
+    const password = passwordInput.value.trim()
 
     if (!email) {
         showToast('Please enter an email address', 'error')
@@ -761,10 +763,13 @@ async function handleAddAccount(e) {
     submitBtn.textContent = 'Adding...'
 
     try {
+        const body = { email }
+        if (password) body.password = password
+
         const response = await apiFetch(`/accounts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
+            body: JSON.stringify(body)
         })
         const data = await response.json()
 
@@ -783,6 +788,7 @@ async function handleAddAccount(e) {
             renderAccounts()
             updateStats()
             emailInput.value = ''
+            passwordInput.value = ''
             showToast(`${data.email} added and ready to run`, 'success')
         } else {
             showToast(data.error || 'Failed to add account', 'error')

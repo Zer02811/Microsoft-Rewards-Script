@@ -650,7 +650,7 @@ const requestHandler = async (req, res) => {
         if (method === 'POST' && pathname === '/accounts') {
             const body = await readJsonObject(req)
             try {
-                const created = addAccountToEnv(projectRoot, body.email)
+                const created = addAccountToEnv(projectRoot, body.email, body.password)
                 pm.note('info', `Account ${created.email} added as ACCOUNT_${created.index} via API.`)
                 return sendJson(res, 201, { created: true, index: created.index, email: created.email })
             } catch (err) {

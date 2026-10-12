@@ -70,7 +70,7 @@ export function removeAccountFromEnv(projectRoot, index) {
     return { index: i, envPath: file }
 }
 
-export function addAccountToEnv(projectRoot, email) {
+export function addAccountToEnv(projectRoot, email, password) {
     const normalized = String(email ?? '').trim()
     if (!normalized || normalized.length > 320 || !EMAIL_RE.test(normalized)) {
         throw Object.assign(new Error('A valid email address is required.'), { code: 'BAD_REQUEST' })
@@ -93,8 +93,18 @@ export function addAccountToEnv(projectRoot, email) {
     const file = envFilePath(projectRoot)
     const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
     const separator = before.length === 0 || before.endsWith('\n') ? '' : '\n'
-    fs.appendFileSync(file, `${separator}\nACCOUNT_${index}_EMAIL=${normalized}\n`, 'utf8')
+
+    let lines = `${separator}\nACCOUNT_${index}_EMAIL=${normalized}\n`
+    if (password && String(password).trim()) {
+        lines += `ACCOUNT_${index}_PASSWORD=${String(password).trim()}\n`
+    }
+
+    fs.appendFileSync(file, lines, 'utf8')
 
     process.env[`ACCOUNT_${index}_EMAIL`] = normalized
+    if (password && String(password).trim()) {
+        process.env[`ACCOUNT_${index}_PASSWORD`] = String(password).trim()
+    }
+
     return { index, email: normalized, envPath: file }
 }
