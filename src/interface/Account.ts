@@ -1,6 +1,6 @@
 export interface Account {
     email: string
-    password: string
+    password?: string
     totpSecret?: string
     recoveryEmail: string
     geoLocale: string

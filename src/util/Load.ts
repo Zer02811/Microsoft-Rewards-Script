@@ -130,7 +130,7 @@ export function loadAccounts(): Account[] {
             const email = envStr(`ACCOUNT_${index}_EMAIL`)
             if (!email) continue
 
-            const password = envStr(`ACCOUNT_${index}_PASSWORD`) ?? ''
+            const password = envStr(`ACCOUNT_${index}_PASSWORD`)
 
             accounts.push({
                 email,
