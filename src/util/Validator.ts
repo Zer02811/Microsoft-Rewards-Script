@@ -233,7 +233,7 @@ const AccountProxySchema = z
 
 export const AccountSchema = z.object({
     email: z.string(),
-    password: z.string(),
+    password: z.string().optional(),
     totpSecret: z.string().optional(),
     recoveryEmail: z.string(),
     geoLocale: AccountCountrySchema,
