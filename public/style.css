@@ -199,14 +199,16 @@ label { font-size: .8rem; font-weight: 500; color: var(--c-text-dim); }
 input[type='text'],
 input[type='email'],
 input[type='password'],
+textarea,
 .datetime-input {
     background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm);
     padding: .5rem .65rem; color: var(--c-text); font-size: .85rem; font-family: var(--font);
     outline: none; transition: border-color .15s;
     width: 100%;
 }
-input:focus, .datetime-input:focus { border-color: var(--c-accent); }
-input::placeholder { color: var(--c-text-dim); }
+textarea { resize: vertical; min-height: 4.5rem; margin-bottom: .4rem; }
+input:focus, textarea:focus, .datetime-input:focus { border-color: var(--c-accent); }
+input::placeholder, textarea::placeholder { color: var(--c-text-dim); }
 
 .datetime-input::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
 

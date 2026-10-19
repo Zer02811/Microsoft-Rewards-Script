@@ -15,9 +15,8 @@ let activeTab = 'logs'
 let lastPoints = null // last /points response, feeds the running banner
 
 // DOM Elements
-const emailInput = document.getElementById('emailInput')
-const passwordInput = document.getElementById('passwordInput')
-const addAccountForm = document.getElementById('addAccountForm')
+const bulkAccountsInput = document.getElementById('bulkAccountsInput')
+const bulkAddForm = document.getElementById('bulkAddForm')
 const accountsList = document.getElementById('accountsList')
 const serverStatusEl = document.getElementById('serverStatus')
 const apiTokenInput = document.getElementById('apiTokenInput')
@@ -141,7 +140,7 @@ function restoreToggle(key, element) {
 }
 
 function setupEventListeners() {
-    addAccountForm.addEventListener('submit', handleAddAccount)
+    bulkAddForm.addEventListener('submit', handleBulkAdd)
     selectAllBtn.addEventListener('click', handleSelectAll)
     runSelectedBtn.addEventListener('click', handleRunSelected)
     scheduleSelectedBtn.addEventListener('click', handleScheduleSelected)
@@ -741,64 +740,91 @@ async function startMultipleAccounts(accountIndexes, options = {}) {
     }
 }
 
-// Event Handlers
-async function handleAddAccount(e) {
+// Parse "email|password" lines. `|` only - passwords can contain spaces.
+function parseBulkAccounts(text) {
+    const entries = []
+    for (const line of String(text ?? '').split(/\r?\n/)) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const [email, ...rest] = trimmed.split('|')
+        const password = rest.join('|').trim()
+        entries.push({ email: email.trim(), password })
+    }
+    return entries
+}
+
+async function handleBulkAdd(e) {
     e.preventDefault()
 
-    const email = emailInput.value.trim()
-    const password = passwordInput.value.trim()
-
-    if (!email) {
-        showToast('Please enter an email address', 'error')
+    const entries = parseBulkAccounts(bulkAccountsInput.value)
+    if (entries.length === 0) {
+        showToast('Enter at least one email', 'error')
         return
     }
 
-    if (accounts.some(acc => acc.email.toLowerCase() === email.toLowerCase())) {
-        showToast('Account already exists', 'warning')
-        return
-    }
-
-    const submitBtn = addAccountForm.querySelector('button[type="submit"]')
+    const submitBtn = bulkAddForm.querySelector('button[type="submit"]')
     submitBtn.disabled = true
-    submitBtn.textContent = 'Adding...'
 
-    try {
-        const body = { email }
-        if (password) body.password = password
+    const results = { added: [], skipped: [], failed: [] }
 
-        const response = await apiFetch(`/accounts`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        })
-        const data = await response.json()
+    for (const [i, entry] of entries.entries()) {
+        submitBtn.textContent = `Adding ${i + 1}/${entries.length}...`
 
-        if (response.ok) {
-            accounts.push({
-                index: data.index,
-                email: data.email,
-                points: 0,
-                status: 'not-logged-in',
-                runs: 0,
-                lastRunAt: null,
-                lastSuccess: null,
-                isConfigured: true
-            })
-            saveToLocalStorage()
-            renderAccounts()
-            updateStats()
-            emailInput.value = ''
-            passwordInput.value = ''
-            showToast(`${data.email} added and ready to run`, 'success')
-        } else {
-            showToast(data.error || 'Failed to add account', 'error')
+        if (!entry.email) continue
+        if (accounts.some(acc => acc.email.toLowerCase() === entry.email.toLowerCase())) {
+            results.skipped.push(entry.email)
+            continue
         }
-    } catch {
-        showToast('Failed to connect to server', 'error')
+
+        try {
+            const body = { email: entry.email }
+            if (entry.password) body.password = entry.password
+            const response = await apiFetch(`/accounts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            const data = await response.json()
+
+            if (response.ok) {
+                accounts.push({
+                    index: data.index,
+                    email: data.email,
+                    points: 0,
+                    status: 'not-logged-in',
+                    runs: 0,
+                    lastRunAt: null,
+                    lastSuccess: null,
+                    isConfigured: true
+                })
+                results.added.push(data.email)
+            } else if (response.status === 409) {
+                results.skipped.push(entry.email)
+            } else {
+                results.failed.push(`${entry.email}: ${data.error || 'failed'}`)
+            }
+        } catch {
+            results.failed.push(`${entry.email}: server unreachable`)
+        }
     }
+
+    saveToLocalStorage()
+    renderAccounts()
+    updateStats()
+
+    // Keep only the lines that did not make it, so a retry is one click.
+    const retryLines = entries
+        .filter(entry => results.failed.some(failure => failure.startsWith(`${entry.email}:`)))
+        .map(entry => (entry.password ? `${entry.email}|${entry.password}` : entry.email))
+    bulkAccountsInput.value = retryLines.join('\n')
 
     submitBtn.disabled = false
-    submitBtn.textContent = 'Add Account'
+    submitBtn.textContent = 'Add All'
+
+    const summary = [`${results.added.length} added`, `${results.skipped.length} skipped`]
+    if (results.failed.length) summary.push(`${results.failed.length} failed`)
+    showToast(summary.join(', '), results.failed.length ? 'error' : 'success')
+    if (results.failed.length) console.warn('Bulk add failures:', results.failed)
 }
 
 function handleSelectAll() {
@@ -1304,5 +1330,5 @@ function startPolling() {
 // Node-only export hook so tests/publicUi.test.mjs can exercise the rendering
 // and proxy rules without a browser. Inert in the page (no `module` there).
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { proxyPayload: proxyPayloadFromForm, renderErrors, renderHistory, formatExit }
+    module.exports = { proxyPayload: proxyPayloadFromForm, renderErrors, renderHistory, formatExit, parseBulkAccounts }
 }

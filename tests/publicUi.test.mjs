@@ -73,7 +73,7 @@ globalThis.localStorage = {
 }
 globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) })
 
-const { proxyPayload, renderErrors, renderHistory, formatExit } = await import('../public/app.js')
+const { proxyPayload, renderErrors, renderHistory, formatExit, parseBulkAccounts } = await import('../public/app.js')
 
 function fill({ url = '', port = '', username = '', password = '' }) {
     getElement('proxyUrlInput').value = url
@@ -144,4 +144,17 @@ test('a signal-based exit is labelled as killed', () => {
     assert.equal(formatExit({ code: null, signal: 'SIGTERM' }), 'killed (SIGTERM)')
     assert.equal(formatExit(0), 'exit 0')
     assert.equal(formatExit(null), '')
+})
+
+test('bulk input parses email|password lines and skips blanks/comments', () => {
+    assert.deepEqual(
+        parseBulkAccounts('a@x.com|pw1\n\n  # note\nb@x.com  \n c@x.com|pw with space | tail \n'),
+        [
+            { email: 'a@x.com', password: 'pw1' },
+            { email: 'b@x.com', password: '' },
+            { email: 'c@x.com', password: 'pw with space | tail' }
+        ]
+    )
+    assert.deepEqual(parseBulkAccounts(''), [])
+    assert.deepEqual(parseBulkAccounts(undefined), [])
 })

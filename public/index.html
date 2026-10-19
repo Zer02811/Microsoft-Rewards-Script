@@ -34,15 +34,12 @@
 
                 <div class="sidebar-bottom">
                     <section class="sidebar-card">
-                        <span class="sidebar-card-label">Add Account</span>
-                        <form id="addAccountForm" aria-label="Add new account">
-                            <label for="emailInput">Email Address</label>
-                            <div class="form-row">
-                                <input type="email" id="emailInput" name="email" placeholder="email@example.com" required aria-required="true" />
-                                <button type="submit" class="btn btn-primary btn-icon" aria-label="Add account">+</button>
-                            </div>
-                            <label for="passwordInput">Password (optional)</label>
-                            <input type="password" id="passwordInput" name="password" placeholder="Leave blank for 2FA/Authenticator" autocomplete="new-password" />
+                        <span class="sidebar-card-label">Add Accounts</span>
+                        <form id="bulkAddForm" aria-label="Add accounts in bulk">
+                            <label for="bulkAccountsInput">One per line: email|password</label>
+                            <textarea id="bulkAccountsInput" rows="4" spellcheck="false" placeholder="a@outlook.com|pass1&#10;b@outlook.com|pass2&#10;c@outlook.com"></textarea>
+                            <p class="control-hint">Password optional. Leave it out for 2FA/Authenticator accounts.</p>
+                            <button type="submit" class="btn btn-primary">Add All</button>
                         </form>
                     </section>
 
