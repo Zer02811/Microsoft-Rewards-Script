@@ -32,7 +32,7 @@ import {
 import { readSchedule, writeSchedule } from './scheduleStore.js'
 import { readScheduledTasks, addScheduledTask, removeScheduledTask } from './taskScheduler.js'
 import { TaskRunner } from './taskRunner.js'
-import { deleteStoredSessions, getSessionLoginStatusMap, listStoredSessions } from './sessionStore.js'
+import { deleteStoredSessions, getBannedAccountsMap, getSessionLoginStatusMap, listStoredSessions } from './sessionStore.js'
 import { resolveRunCommand } from './runCommand.js'
 import { disableAutostart, enableAutostart, getAutostartStatus, normalizeTarget } from './autostart.js'
 import { TrayController } from './trayControl.js'
@@ -578,6 +578,10 @@ const requestHandler = async (req, res) => {
             const sessionPath =
                 loaded?.data && typeof loaded.data.sessionPath === 'string' ? loaded.data.sessionPath : 'sessions'
             const sessionMap = getSessionLoginStatusMap(projectRoot, sessionPath)
+            const bannedMap = getBannedAccountsMap(projectRoot, sessionPath)
+            for (const account of accounts) {
+                account.banned = Boolean(bannedMap?.get(account.email.toLowerCase()))
+            }
             if (sessionMap) {
                 for (const account of accounts) {
                     const info = sessionMap.get(account.email.toLowerCase()) ?? null

@@ -213,6 +213,28 @@ export function getSessionLoginStatusMap(projectRoot, sessionPath) {
     return map
 }
 
+// Banned accounts: set by the bot when Microsoft's service-abuse lock page
+// appears during login. Stored in account_metadata so it survives session
+// deletion; cleared on the next successful login.
+export function getBannedAccountsMap(projectRoot, sessionPath) {
+    const { dbPath, exists } = resolveSessionDb(projectRoot, sessionPath)
+    if (!exists) return null
+
+    const db = openDatabase(dbPath, true)
+    try {
+        const rows = db
+            .prepare('SELECT email FROM account_metadata WHERE banned = 1')
+            .all()
+        const map = new Map(rows.map(row => [String(row.email).toLowerCase(), true]))
+        return map.size ? map : null
+    } catch {
+        // Legacy DBs without the column predate the feature.
+        return null
+    } finally {
+        closeDatabase(db)
+    }
+}
+
 export function deleteStoredSessions(projectRoot, sessionPath, email) {
     const { dbPath, exists } = resolveSessionDb(projectRoot, sessionPath)
     if (!exists) return { found: false, removed: 0, email, platforms: [] }

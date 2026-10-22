@@ -74,9 +74,14 @@ function getDb(sessionPath: string): DatabaseSync {
         CREATE TABLE IF NOT EXISTS account_metadata (
             email           TEXT PRIMARY KEY COLLATE NOCASE,
             resolved_region TEXT,
+            banned          INTEGER NOT NULL DEFAULT 0,
             updated_at      INTEGER NOT NULL
         )
     `)
+    // ponytail: legacy DBs lack the column; ALTER once, full migration if more columns arrive
+    try {
+        db.exec('ALTER TABLE account_metadata ADD COLUMN banned INTEGER NOT NULL DEFAULT 0')
+    } catch {}
 
     return db
 }
@@ -197,6 +202,28 @@ export function saveResolvedRegion(sessionPath: string, email: string, region: s
              DO UPDATE SET resolved_region = excluded.resolved_region, updated_at = excluded.updated_at`
         )
         .run(email, region, Date.now())
+}
+
+// Microsoft flags a hard ban via the service-abuse lock page during login.
+// The flag survives session deletion so the UI can still surface it until the
+// account row itself is removed.
+export function setAccountBanned(sessionPath: string, email: string, banned: boolean): void {
+    const db = getDb(sessionPath)
+    if (banned) {
+        const result = db.prepare('UPDATE account_metadata SET banned = 1, updated_at = ? WHERE email = ?').run(Date.now(), email)
+        if (Number(result.changes) === 0) {
+            db.prepare('INSERT INTO account_metadata (email, banned, updated_at) VALUES (?, 1, ?)').run(email, Date.now())
+        }
+    } else {
+        db.prepare('UPDATE account_metadata SET banned = 0, updated_at = ? WHERE email = ?').run(Date.now(), email)
+    }
+}
+
+export function isAccountBanned(sessionPath: string, email: string): boolean {
+    const row = getDb(sessionPath)
+        .prepare('SELECT banned FROM account_metadata WHERE email = ?')
+        .get(email) as { banned?: number | null } | undefined
+    return row?.banned === 1
 }
 
 export function closeSessionStore(): void {

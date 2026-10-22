@@ -190,6 +190,7 @@ input:focus-visible, .datetime-input:focus-visible { box-shadow: 0 0 0 3px var(-
 .account-status.not-logged-in { color: var(--c-error); background: rgba(239,68,68,.12); }
 .account-status.expired { color: var(--c-warning); background: rgba(234,179,8,.12); }
 .account-status.running { color: var(--c-accent); background: var(--c-accent-dim); }
+.account-status.banned { color: #fff; background: #dc2626; font-weight: 600; }
 
 /* ─── Forms & Inputs ─────────────────────────────────────────────────────── */
 .form-group { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .75rem; }

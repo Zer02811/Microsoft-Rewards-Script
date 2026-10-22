@@ -1,7 +1,7 @@
 import { URLs, REWARDS_BASE_URL } from '../../constants/urls'
 import type { Page } from 'patchright'
 import type { MicrosoftRewardsBot } from '../../index'
-import { saveStorageState } from '../../util/SessionStore'
+import { setAccountBanned, saveStorageState } from '../../util/SessionStore'
 import { unknownPageDiagnostic } from '../../util/ErrorDiagnostic'
 import { configureMediaBlocking, suspendMediaBlocking } from '../MediaBlocker'
 
@@ -463,6 +463,7 @@ export class Login {
             case 'ACCOUNT_LOCKED': {
                 const msg = 'This account has been locked! Remove from config and restart!'
                 this.bot.logger.error(this.bot.isMobile, 'LOGIN', msg)
+                setAccountBanned(this.bot.config.sessionPath, account.email, true)
                 throw new Error(msg)
             }
 
@@ -905,6 +906,8 @@ export class Login {
             `Saving session | cookies=${storageState.cookies.length} | origins=${storageState.origins.length}`
         )
         saveStorageState(this.bot.config.sessionPath, account.email, this.bot.isMobile, storageState)
+        // A successful login proves the account is usable again.
+        setAccountBanned(this.bot.config.sessionPath, account.email, false)
 
         await configureMediaBlocking(this.bot, context)
         this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Login completed, session saved')

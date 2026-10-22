@@ -641,6 +641,7 @@ async function fetchAccounts() {
                     status: acc.sessionStatus ? acc.sessionStatus : determineAccountStatus(acc),
                     sessionStatus: acc.sessionStatus ?? null,
                     sessionUpdatedAt: acc.sessionUpdatedAt ?? null,
+                    banned: Boolean(acc.banned),
                     runs: acc.runs || 0,
                     lastRunAt: acc.lastRunAt,
                     lastSuccess: acc.lastSuccess,
@@ -1085,6 +1086,7 @@ function renderAccounts() {
                         </div>
                     </div>
                     <div class="account-points">${account.points} pts</div>
+                    ${account.banned ? '<span class="account-status banned" title="Locked/banned by Microsoft — remove this account">Banned</span>' : ''}
                     <span class="account-status ${account.status}">${formatStatus(account.status)}</span>
                 </div>
                 <button class="btn btn-secondary" data-index="${account.index}" data-action="proxy">Proxy</button>
